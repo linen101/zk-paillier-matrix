@@ -1,13 +1,130 @@
-use curv::arithmetic::traits::*;
-use curv::BigInt;
-use paillier::{EncryptWithChosenRandomness, Keypair, Paillier, Randomness, RawPlaintext};
+use paillier::{Paillier, EncryptionKey};
+use paillier::traits::KeyGeneration;
 
-use zk_paillier::zkproofs::RangeProofTrait;
-use zk_paillier::zkproofs::{RangeProof, RangeProofNi};
+use zk_paillier::zkproofs::*;
 
-use criterion::{criterion_group, criterion_main, Criterion, ParameterizedBenchmark};
+use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
+use std::time::Instant;
 
-fn range_proof() {
+fn gen_keys() -> EncryptionKey{
+    let (ek, _) = Paillier::keypair().keys();
+
+    // Return  the encryption key 
+    ek
+}
+
+fn benchmark_prove_verify(matrix_size: (usize, usize)) {
+    let n = matrix_size.0;
+    let d = matrix_size.1;
+
+    // Key generation
+    let ek = gen_keys();
+
+    // generate and encrypt matrix A
+    let matrix_a = MatrixPaillier::gen_matrix(n, d, &ek);
+    let matrix_r_a = MatrixPaillier::generate_randomness(n, d, &ek);
+    let matrix_e_a = MatrixPaillier::encrypt_matrix(&matrix_a, &matrix_r_a, &ek);
+
+    // generate and encrypt matrix B
+    let matrix_b = MatrixPaillier::gen_matrix(d, n, &ek);
+    let matrix_r_b = MatrixPaillier::generate_randomness(d, n, &ek);
+    let matrix_e_b = MatrixPaillier::encrypt_matrix(&matrix_b, &matrix_r_b, &ek);
+
+    // compute dot products
+    let matrix_c = MulDotProducts::compute_plaintext_dot_products(&matrix_a, &matrix_b);
+    let (matrix_e_c, matrix_r_c) = MulDotProducts::compute_encrypted_dot_products(&matrix_c, &ek);
+
+    let matrix_witness = MatrixWitness {
+        matrix_a,
+        matrix_b: matrix_b.clone(),
+        matrix_c: matrix_c.clone(),
+        matrix_r_a,
+        matrix_r_b: matrix_r_b.clone(),
+        matrix_r_c: matrix_r_c.clone(),
+    };
+
+    let matrix_statement = MatrixStatement {
+        ek: ek.clone(),
+        matrix_e_a: matrix_e_a.clone(),
+        matrix_e_b: matrix_e_b.clone(),
+        matrix_e_c: matrix_e_c.clone(),
+    };
+
+    // Measure proving/verifying time
+    let start = Instant::now();
+    MatrixDots::matrix_dots_mul_prove_verify(&matrix_statement, &matrix_witness);
+    let duration = start.elapsed();
+
+    println!("Time elapsed for matrix size ({}, {}) during proving/verifying: {:?}", n, d, duration);
+}
+
+fn benchmark_enc_prove_verify(matrix_size: (usize, usize)) {
+    let n = matrix_size.0;
+    let d = matrix_size.1;
+
+    let ek = gen_keys();
+
+    // generate and encrypt matrix A
+    let matrix_a = MatrixPaillier::gen_matrix(n, d, &ek);
+    let matrix_r_a = MatrixPaillier::generate_randomness(n, d, &ek);
+    let matrix_e_a = MatrixPaillier::encrypt_matrix(&matrix_a, &matrix_r_a, &ek);
+
+    // generate and encrypt matrix B
+    let matrix_b = MatrixPaillier::gen_matrix(d, n, &ek);
+    let matrix_r_b = MatrixPaillier::generate_randomness(d, n, &ek);
+    let matrix_e_b = MatrixPaillier::encrypt_matrix(&matrix_b, &matrix_r_b, &ek);
+
+    // Compute encrypted dot products with homomorphism
+    let (matrix_e_c, matrix_r_c) = EncDotProducts::compute_encrypted_dot_products_homo(&matrix_e_a, &matrix_b, &ek);
+
+    let matrix_ciph_witness = MatrixCiphWitness {
+        matrix_b,
+        matrix_r_b,
+        matrix_r_c,
+    };
+
+    let matrix_ciph_statement = MatrixCiphStatement {
+        ek,
+        matrix_e_a,
+        matrix_e_b,
+        matrix_e_c,
+    };
+
+    // Measure proving/verifying time
+    let start = Instant::now();
+    EncMatrixDots::matrix_dots_mul_prove_verify(&matrix_ciph_statement, &matrix_ciph_witness);
+    let duration = start.elapsed();
+
+    println!("Time elapsed for matrix size ({}, {}) in encrypted proving/verifying: {:?}", n, d, duration);
+}
+
+fn benchmark_matrices(c: &mut Criterion) {
+    let mut group = c.benchmark_group("MatrixProving");
+
+    // Reduce the sample size to avoid long running benchmarks
+    group.sample_size(3);  // Reduce sample size here
+
+    let sizes = vec![(2, 2), (4, 2), (8, 2), (16, 2)];
+
+    for size in sizes {
+        group.bench_function(&format!("prove_verify_{:?}", size), |b| {
+            b.iter(|| benchmark_prove_verify(black_box(size)));
+        });
+
+        group.bench_function(&format!("enc_prove_verify_{:?}", size), |b| {
+            b.iter(|| benchmark_enc_prove_verify(black_box(size)));
+        });
+    }
+    group.finish();
+
+}
+
+criterion_group!(benches, benchmark_matrices);
+criterion_main!(benches);
+
+
+
+/*fn range_proof() {
     // TODO: bench range for 256bit range.
     // common:
     let range = BigInt::sample(RANGE_BITS);
@@ -93,3 +210,4 @@ const STATISTICAL_ERROR_FACTOR: usize = 40;
 
 criterion_group!(benches, criterion_benchmark);
 criterion_main!(benches);
+*/

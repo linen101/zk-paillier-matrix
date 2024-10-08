@@ -161,4 +161,62 @@ mod tests {
         let verify = proof.verify(&statement);
         assert!(verify.is_ok());
     }
-}
+
+    #[test]
+    fn test_matrix_ciphertext_proof(){
+
+        let n:usize = 100;
+        let d:usize = 3;
+        // generate a fresh paillier keypair and extract encryption key. do not extract decryption key
+        let (ek, _) = Paillier::keypair().keys();
+
+        // define a matrix A with dimensions n x d with random BigInt values
+        let mut matrix_a: Vec<Vec<BigInt>> = Vec::new();
+
+        // Populate the matrix with random values
+        for _ in 0..n {
+            let mut row: Vec<BigInt> = Vec::new();
+            for _ in 0..d {
+                let random_value = BigInt::sample_below(&ek.n); // Generate random value for each element
+                row.push(random_value);
+            }
+            matrix_a.push(row);
+        }
+
+        for row in matrix_a.iter() {
+            for element in row.iter() {
+                // generate random r for each element which should be smaller than the public modulus n
+                let r = BigInt::sample_below(&ek.n);
+            
+                // encrypt the element with chosen randomness r
+                let c = Paillier::encrypt_with_chosen_randomness(
+                    &ek,
+                    RawPlaintext::from(element.clone()),
+                    &Randomness(r.clone())
+                )
+                .0
+                .into_owned();
+        
+             // Generate the witness (plaintext and randomness)
+            let witness = CiphertextWitness {
+                x: element.clone(),
+                r,
+            };
+        
+            // Step 5: Create the statement with the encryption key and ciphertext
+            let statement = CiphertextStatement {
+                ek: ek.clone(),
+                c,
+            };
+        
+            // Step 6: Prove knowledge of the plaintext for this element
+            let proof = CiphertextProof::prove(&witness, &statement);
+        
+            // Step 7: Verify the proof
+            let verify = proof.verify(&statement);
+            assert!(verify.is_ok(), "Proof verification failed for element {:?}", element);
+            }
+        }
+        println!("Proofs verified successfully for an n x d matrix: {} x {}", n, d);
+        }
+    }

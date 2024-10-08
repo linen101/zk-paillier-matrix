@@ -25,6 +25,10 @@ mod zero_enc_proof;
 
 mod errors;
 mod utils;
+mod multiplication_proof_plaintext_ciphertext;
+mod matrix;
+mod matrix_multiplication_proof;
+mod matrix_multiplication_proof_plaintext_ciphertext;
 
 pub use self::{
     correct_ciphertext::*,
@@ -33,6 +37,10 @@ pub use self::{
     correct_message::CorrectMessageProof,
     correct_opening::CorrectOpening,
     multiplication_proof::*,
+    multiplication_proof_plaintext_ciphertext::*,
+    matrix::*,
+    matrix_multiplication_proof::*,
+    matrix_multiplication_proof_plaintext_ciphertext::*,
     range_proof::{ChallengeBits, EncryptedPairs, Proof, RangeProof},
     range_proof_ni::RangeProofNi,
     verlin_proof::*,

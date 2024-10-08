@@ -36,7 +36,7 @@ version = "0.4.3"
 default-features = false
 
 [dev-dependencies]
-criterion = "0.3"
+criterion = "0.4"
 
 [features]
 default = ["curv-kzen/rust-gmp-kzen"]
