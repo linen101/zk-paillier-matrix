@@ -102,7 +102,7 @@ fn benchmark_matrices(c: &mut Criterion) {
     let mut group = c.benchmark_group("MatrixProving");
 
     // Reduce the sample size to avoid long running benchmarks
-    group.sample_size(3);  // Reduce sample size here
+    group.sample_size(10);  // Reduce sample size here
 
     let sizes = vec![(2, 2), (4, 2), (8, 2), (16, 2)];
 
