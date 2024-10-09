@@ -122,6 +122,7 @@ impl MulCiphProof {
         }
     }
 
+
     pub fn verify(&self, statement: &MulCiphStatement) -> Result<(), IncorrectProof> {
         let e = super::compute_digest(
             iter::once(&statement.ek.n)
