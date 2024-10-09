@@ -6,5 +6,6 @@ This library is a copy of [zk-paillier](https://github.com/ZenGo-X/zk-paillier) 
 We have used this library to write proofs on matrices.
 
 We have extended the library with the following proofs:
-* [proof of plaintext matrix - plaintext matrix multiplication (uses proof of plaintext knowledge)](https://github.com/linen101/zk-paillier-matrix/blob/master/src/zkproofs/matrix_multiplication_proof.rs)
-* [proof of plaintext matrix - ciphertext matrix multiplication (uses proof of plaintext knowledge)](https://github.com/linen101/zk-paillier-matrix/blob/master/src/zkproofs/matrix_multiplication_proof_plaintext_ciphertext.rs)
+* [proof of correct multiplication of plaintext value - ciphertext value](https://github.com/linen101/zk-paillier-matrix/blob/master/src/zkproofs/multiplication_proof_plaintext_ciphertext.rs)
+* [proof of correct multiplication of plaintext matrix - plaintext matrix  (uses proof of plaintext knowledge)](https://github.com/linen101/zk-paillier-matrix/blob/master/src/zkproofs/matrix_multiplication_proof.rs)
+* [proof of correct multiplication of plaintext matrix - ciphertext matrix (uses proof of plaintext knowledge)](https://github.com/linen101/zk-paillier-matrix/blob/master/src/zkproofs/matrix_multiplication_proof_plaintext_ciphertext.rs)
