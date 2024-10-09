@@ -74,6 +74,7 @@ impl MulCiphProof {
         // P picks random r_da in Z_n
         let r_da = sample_paillier_random(&statement.ek.n);
         
+        
         // ->>>>>>>
         //  P computes e_da = e_a^d * r_{da}^n mod n^2
 

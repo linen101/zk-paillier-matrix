@@ -104,7 +104,7 @@ fn benchmark_matrices(c: &mut Criterion) {
     // Reduce the sample size to avoid long running benchmarks
     group.sample_size(10);  // Reduce sample size here
 
-    let sizes = vec![(2, 2), (4, 2), (8, 2), (16, 2)];
+    let sizes = vec![(2, 2), (4, 2), (10, 2)];
 
     for size in sizes {
         group.bench_function(&format!("prove_verify_{:?}", size), |b| {

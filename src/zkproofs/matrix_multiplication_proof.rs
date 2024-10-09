@@ -10,6 +10,8 @@ use crate::zkproofs::multiplication_proof::MulStatement;
 use crate::zkproofs::multiplication_proof::MulWitness;
 use crate::zkproofs::multiplication_proof::sample_paillier_random;
 
+use rayon::prelude::*; // Add this import
+
 /// Τhis proof is a non'interactive proof for matrix multiplication C = AB
 /// when the prover knows both A[n*d], B[d*n].
 /// To prove this, we apply the Paillier plaintext multiplication proof 
@@ -56,9 +58,10 @@ impl MatrixDots {
         let cols_a = mwitness.matrix_a[0].len();
         let rows_b = mwitness.matrix_b.len();
         let cols_b = mwitness.matrix_b[0].len();
-        for i in 0..rows_a {
-            for j in 0..cols_b {
-                for k in 0..cols_a {
+        // Parallelize the outer loop
+        (0..rows_a).into_par_iter().for_each(|i| {
+            (0..cols_b).into_par_iter().for_each(|j| {
+                (0..cols_a).into_par_iter().for_each(|k| {
                     // Access each element in the current row from each matrix matrix_a, r_a, e_a
                     let a = &mwitness.matrix_a[i][k];
                     let r_a = &mwitness.matrix_r_a[i][k];
@@ -87,9 +90,9 @@ impl MatrixDots {
                     let proof = MulProof::prove(&witness, &statement);
                     let verify = proof.verify(&statement);
                     assert!(verify.is_ok());
-                }
-            }
-        }
+                });
+            });
+        });
     }
 }  
 

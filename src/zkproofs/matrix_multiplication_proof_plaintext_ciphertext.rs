@@ -10,6 +10,9 @@ use crate::zkproofs::multiplication_proof_plaintext_ciphertext::MulCiphStatement
 use crate::zkproofs::multiplication_proof_plaintext_ciphertext::MulCiphWitness;
 use crate::zkproofs::multiplication_proof::sample_paillier_random;
 
+use rayon::prelude::*; // parallelization
+
+
 /// Τhis proof is a non'interactive proof for matrix multiplication C = AB
 /// when the prover knows both only B[d*n] and does not know A[n*d].
 /// To prove this, we apply the Paillier plaintext multiplication proof 
@@ -56,9 +59,10 @@ impl EncMatrixDots {
         let cols_a = mstatement.matrix_e_a[0].len();
         let rows_b = mwitness.matrix_b.len();
         let cols_b = mwitness.matrix_b[0].len();
-        for i in 0..rows_a {
-            for j in 0..cols_b {
-                for k in 0..cols_a {
+        // Parallelize the outer loop
+        (0..rows_a).into_par_iter().for_each(|i| {
+            (0..cols_b).into_par_iter().for_each(|j| {
+                (0..cols_a).into_par_iter().for_each(|k| {
                     // Access each element in the current row from  e_a
                     let e_a = &mstatement.matrix_e_a[i][k];
 
@@ -82,9 +86,9 @@ impl EncMatrixDots {
                     let proof = MulCiphProof::prove(&witness, &statement);
                     let verify = proof.verify(&statement);
                     assert!(verify.is_ok());
-                }
-            }
-        }
+                });
+            });
+        });
     }
 }  
 
