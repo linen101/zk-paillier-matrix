@@ -5,7 +5,7 @@ use curv::BigInt;
 use paillier::Paillier;
 use paillier::EncryptWithChosenRandomness;
 use paillier::{EncryptionKey, Randomness, RawPlaintext};
-use crate::zkproofs::range_proof::;
+use crate::zkproofs::range_proof::*;
 use crate::zkproofs::multiplication_proof::MulStatement;
 use crate::zkproofs::multiplication_proof::MulWitness;
 use crate::zkproofs::multiplication_proof::sample_paillier_random;
@@ -19,7 +19,6 @@ use rayon::prelude::*; // Add this import
 
  
 /// This proof uses for each element of the array the range proof taken from
-///
 /// which is implemented in the module "range_proof_ni"
 
 
