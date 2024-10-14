@@ -27,6 +27,7 @@ mod errors;
 mod utils;
 mod multiplication_proof_plaintext_ciphertext;
 mod matrix;
+mod array;
 mod matrix_multiplication_proof;
 mod matrix_multiplication_proof_plaintext_ciphertext;
 
@@ -39,6 +40,7 @@ pub use self::{
     multiplication_proof::*,
     multiplication_proof_plaintext_ciphertext::*,
     matrix::*,
+    array::*,
     matrix_multiplication_proof::*,
     matrix_multiplication_proof_plaintext_ciphertext::*,
     range_proof::{ChallengeBits, EncryptedPairs, Proof, RangeProof},

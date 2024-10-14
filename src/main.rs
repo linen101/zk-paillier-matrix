@@ -38,8 +38,8 @@ fn main() {
     // encrypt B
     let matrix_e_b = MatrixPaillier::encrypt_matrix(&matrix_b, &matrix_r_b, &ek);
 
-    /// plaintext plaintext matrix proof
-    /// compute plaintext dot products C[]
+    // plaintext plaintext matrix proof
+    // compute plaintext dot products C[]
     let matrix_c = MulDotProducts::compute_plaintext_dot_products(&matrix_a, &matrix_b);
     // compute encrypted dot products, and return with their randomness r_c[]
     let (matrix_e_c, matrix_r_c) = MulDotProducts::compute_encrypted_dot_products(&matrix_c, &ek);

@@ -34,6 +34,27 @@ const SECURITY_PARAMETER: usize = 128;
 ///
 /// This is a non-interactive version of the proof, using Fiat Shamir Transform and assuming Random Oracle Model
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RangeWitness {
+    pub x: BigInt,
+    pub r_x: BigInt,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RangeStatement {
+    ek: EncryptionKey,
+    range: BigInt,
+    e_x: BigInt,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RangeProofNi {
+    encrypted_pairs: EncryptedPairs,
+    proof: Proof,
+    error_factor: usize,
+}
+
+
+/*#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RangeProofNi {
     ek: EncryptionKey,
     range: BigInt,
@@ -42,61 +63,53 @@ pub struct RangeProofNi {
     proof: Proof,
     error_factor: usize,
 }
+ */
 
 impl RangeProofNi {
-    pub fn prove(
-        ek: &EncryptionKey,
-        range: &BigInt,
-        ciphertext: &BigInt,
-        secret_x: &BigInt,
-        secret_r: &BigInt,
-    ) -> RangeProofNi {
+    pub fn prove(witness: &RangeWitness, statement: &RangeStatement) -> RangeProofNi {
+
         let (encrypted_pairs, data_randomness_pairs) =
-            RangeProof::generate_encrypted_pairs(ek, range, SECURITY_PARAMETER);
+            RangeProof::generate_encrypted_pairs(&statement.ek, &statement.range, SECURITY_PARAMETER);
         let (c1, c2) = (encrypted_pairs.c1, encrypted_pairs.c2); // TODO[Morten] fix temporary hack
 
-        let mut vec: Vec<BigInt> = vec![ek.n.clone()];
+        let mut vec: Vec<BigInt> = vec![statement.ek.n.clone()];
         vec.extend_from_slice(&c1);
         vec.extend_from_slice(&c2);
         let e = ChallengeBits::from(BigInt::to_bytes(&super::compute_digest(vec.iter())));
 
         //assuming digest length > error factor
         let proof = RangeProof::generate_proof(
-            ek,
-            secret_x,
-            secret_r,
+            &statement.ek,
+            &witness.x,
+            &witness.r_x,
             &e,
-            range,
+            &statement.range,
             &data_randomness_pairs,
             SECURITY_PARAMETER,
         );
 
         RangeProofNi {
-            ek: ek.clone(),
-            range: range.clone(),
-            ciphertext: ciphertext.clone(),
             encrypted_pairs: EncryptedPairs { c1, c2 },
             proof,
             error_factor: SECURITY_PARAMETER,
         }
     }
 
-    pub fn verify(&self, ek: &EncryptionKey, ciphertext: &BigInt) -> Result<(), IncorrectProof> {
-        // make sure proof was done with the same public key
-        assert_eq!(ek, &self.ek);
-        // make sure proof was done with the same ciphertext
-        assert_eq!(ciphertext, &self.ciphertext);
-        let mut vec: Vec<BigInt> = vec![ek.n.clone()];
+    pub fn verify(&self, statement: &RangeStatement) -> Result<(), IncorrectProof> {
+        
+        let mut vec: Vec<BigInt> = vec![statement.ek.n.clone()];
         vec.extend_from_slice(&self.encrypted_pairs.c1);
         vec.extend_from_slice(&self.encrypted_pairs.c2);
         let e = ChallengeBits::from(BigInt::to_bytes(&super::compute_digest(vec.iter())));
+        
+        // verify that the results match, verifier_output is from RangeProof
         let result = RangeProof::verifier_output(
-            ek,
+            &statement.ek,
             &e,
             &self.encrypted_pairs,
             &self.proof,
-            &self.range,
-            &self.ciphertext,
+            &statement.range,
+            &statement.e_x,
             self.error_factor,
         );
         if result.is_ok() {
@@ -106,6 +119,7 @@ impl RangeProofNi {
         }
     }
 
+    /*
     pub fn verify_self(&self) -> Result<(), IncorrectProof> {
         let mut vec: Vec<BigInt> = vec![self.ek.n.clone()];
         vec.extend_from_slice(&self.encrypted_pairs.c1);
@@ -126,7 +140,9 @@ impl RangeProofNi {
             Err(IncorrectProof)
         }
     }
+    */
 }
+    
 
 #[cfg(test)]
 mod tests {
@@ -154,9 +170,21 @@ mod tests {
             &ek,
             RawPlaintext::from(&secret_x),
             &Randomness::from(&secret_r),
-        );
+        ).0
+        .into_owned();
 
-        RangeProofNi::prove(&ek, &range, &ciphertext.0, &secret_x, &secret_r);
+        let witness = RangeWitness {
+            x:secret_x,
+            r_x:secret_r,
+        };
+
+        let statement = RangeStatement {
+            ek,
+            range,
+            e_x:ciphertext,
+        };
+
+        RangeProofNi::prove(&witness, &statement);
     }
 
     #[test]
@@ -169,10 +197,23 @@ mod tests {
             &ek,
             RawPlaintext::from(&secret_x),
             &Randomness(secret_r.clone()),
-        );
-        let range_proof = RangeProofNi::prove(&ek, &range, &cipher_x.0, &secret_x, &secret_r);
+        ).0
+        .into_owned();
+
+        let witness = RangeWitness {
+            x:secret_x,
+            r_x:secret_r,
+        };
+
+        let statement = RangeStatement {
+            ek,
+            range,
+            e_x:cipher_x,
+        };
+        
+        let range_proof = RangeProofNi::prove(&witness, &statement);
         range_proof
-            .verify(&ek, &cipher_x.0)
+            .verify(&statement)
             .expect("range proof error");
     }
 
@@ -190,11 +231,23 @@ mod tests {
             &ek,
             RawPlaintext::from(&secret_x),
             &Randomness(secret_r.clone()),
-        );
-        let range_proof = RangeProofNi::prove(&ek, &range, &cipher_x.0, &secret_x, &secret_r);
+        ).0
+        .into_owned();
+
+        let witness = RangeWitness {
+            x:secret_x,
+            r_x:secret_r,
+        };
+
+        let statement = RangeStatement {
+            ek,
+            range,
+            e_x:cipher_x,
+        };
+        let range_proof = RangeProofNi::prove(&witness, &statement);
 
         range_proof
-            .verify(&ek, &cipher_x.0)
+            .verify(&statement)
             .expect("range proof error");
     }
 }

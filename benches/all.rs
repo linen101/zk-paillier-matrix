@@ -36,7 +36,7 @@ fn benchmark_prove_verify(matrix_size: (usize, usize)) {
 
     let matrix_witness = MatrixWitness {
         matrix_a,
-        matrix_b: matrix_b.clone(),
+        matrix_b: matrix_b.clone(), // copy from memory
         matrix_c: matrix_c.clone(),
         matrix_r_a,
         matrix_r_b: matrix_r_b.clone(),
