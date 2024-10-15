@@ -18,13 +18,13 @@ pub struct ArrayPaillier {
 }
 
 impl ArrayPaillier {
-    pub fn gen_array(n:usize, range: BigInt) -> Vec<BigInt>{
+    pub fn gen_array(n:usize, range: &BigInt) -> Vec<BigInt>{
         // Define a array A with dimension n  with random BigInt values < range
         let mut array_a: Vec<BigInt> = Vec::new();
 
         // Populate the array with random values with random values within range
         for _ in 0..n {
-            let random_value = BigInt::sample_below(&range); // Generate random value for each element within range
+            let random_value = BigInt::sample_below(&range.div_floor(&BigInt::from(3))); // Generate random value for each element within range
             array_a.push(random_value);
         }
 
@@ -32,7 +32,7 @@ impl ArrayPaillier {
         array_a
     }
 
-    pub fn generate_array_randomness(n: usize, ek: &EncryptionKey) -> Vec<BigInt>{
+    pub fn gen_array_randomness(n: usize, ek: &EncryptionKey) -> Vec<BigInt>{
         let mut randoms: Vec<BigInt> = Vec::new();
         for _ in 0..n {
             let r = sample_paillier_random(&ek.n);

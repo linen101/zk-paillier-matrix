@@ -1,10 +1,12 @@
 use paillier::{Paillier, EncryptionKey};
 use paillier::traits::KeyGeneration;
-
 use zk_paillier::zkproofs::*;
-
+use curv::BigInt;
+use curv::arithmetic::traits::Samplable;
 use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
 use std::time::Instant;
+const RANGE_BITS: usize = 32; //for elliptic curves with 256bits for example
+const SECURITY_PARAMETER: usize = 128;
 
 fn gen_keys() -> EncryptionKey{
     let (ek, _) = Paillier::keypair().keys();
@@ -98,6 +100,39 @@ fn benchmark_enc_prove_verify(matrix_size: (usize, usize)) {
     println!("Time elapsed for matrix size ({}, {}) in encrypted proving/verifying: {:?}", n, d, duration);
 }
 
+
+fn benchmark_range_prove_verify(array_size: usize) {
+    let n = array_size;
+  
+    let range = BigInt::sample(RANGE_BITS);
+    // Key generation
+    let ek = gen_keys();
+
+    // generate and encrypt array X
+    let array_x = ArrayPaillier::gen_array(n, &range);
+    let array_r_x = ArrayPaillier::gen_array_randomness(n, &ek);
+    let array_e_x = ArrayPaillier::encrypt_array(&array_x, &array_r_x, &ek);
+
+    let witness = ArrayRangeWitness {
+        array_x,
+        array_r_x:array_r_x.clone(),
+    };
+
+    let statement = ArrayRangeStatement {
+        ek:ek.clone(),
+        range,
+        array_e_x:array_e_x.clone(),
+    };
+
+    // Measure proving/verifying time
+    let start = Instant::now();
+    ArrayRangeProofNi::array_range_prove_verify(&statement, &witness);
+    let duration = start.elapsed();
+
+    println!("Time elapsed for array size ({}) during proving/verifying: {:?}", n, duration);
+}
+
+
 fn benchmark_matrices(c: &mut Criterion) {
     let mut group = c.benchmark_group("MatrixProving");
 
@@ -119,7 +154,25 @@ fn benchmark_matrices(c: &mut Criterion) {
 
 }
 
-criterion_group!(benches, benchmark_matrices);
+fn benchmark_array_range(c: &mut Criterion) {
+    let mut group = c.benchmark_group("ArrayRangeProving");
+
+    // Reduce the sample size to avoid long running benchmarks
+    group.sample_size(10);  // Reduce sample size here
+
+    let sizes: Vec<usize> = vec![2, 4, 6, 8, 10];
+
+    for size in sizes {
+        group.bench_function(&format!("prove_verify_{:?}", size), |b| {
+            b.iter(|| benchmark_range_prove_verify(black_box(size)));
+        });
+    }
+    group.finish();
+
+}
+
+
+criterion_group!(benches, benchmark_array_range);
 criterion_main!(benches);
 
 

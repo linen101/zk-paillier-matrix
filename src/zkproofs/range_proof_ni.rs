@@ -41,9 +41,9 @@ pub struct RangeWitness {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RangeStatement {
-    ek: EncryptionKey,
-    range: BigInt,
-    e_x: BigInt,
+    pub ek: EncryptionKey,
+    pub range: BigInt,
+    pub e_x: BigInt,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
