@@ -160,7 +160,7 @@ fn benchmark_array_range(c: &mut Criterion) {
     // Reduce the sample size to avoid long running benchmarks
     group.sample_size(10);  // Reduce sample size here
 
-    let sizes: Vec<usize> = vec![2, 4, 6, 8, 10];
+    let sizes: Vec<usize> = vec![ 10];
 
     for size in sizes {
         group.bench_function(&format!("prove_verify_{:?}", size), |b| {

@@ -48,8 +48,8 @@ impl ArrayRangeProofNi {
         let len_a = awitness.array_x.len();
        
          // Parallelize the  loop
-         (0..len_a).into_par_iter().for_each(|i| {
-            
+         //(0..len_a).into_par_iter().for_each(|i| {
+         for i in 0..len_a {   
             // Access each element in the current array from each array array_x, array_r_x, array_e_x
             let x = &awitness.array_x[i];
             let r_x = &awitness.array_r_x[i];
@@ -70,7 +70,7 @@ impl ArrayRangeProofNi {
             }
 
             assert!(verify.is_ok(), "Proof failed for element at index {}", i);
-        });
+        }
 
     }
 }

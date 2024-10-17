@@ -32,19 +32,22 @@ mod array_range_proof_ni;
 mod matrix_multiplication_proof;
 mod matrix_multiplication_proof_plaintext_ciphertext;
 
+mod fujisaki_okamoto_commitment;
+
 pub use self::{
+    array::*,
+    array_range_proof_ni::*,
     correct_ciphertext::*,
     correct_key::{Challenge, CorrectKey, CorrectKeyProof, VerificationAid},
     correct_key_ni::{NiCorrectKeyProof, SALT_STRING},
     correct_message::CorrectMessageProof,
     correct_opening::CorrectOpening,
-    multiplication_proof::*,
-    multiplication_proof_plaintext_ciphertext::*,
+    fujisaki_okamoto_commitment::*,
     matrix::*,
-    array::*,
-    array_range_proof_ni::*,
     matrix_multiplication_proof::*,
     matrix_multiplication_proof_plaintext_ciphertext::*,
+    multiplication_proof::*,
+    multiplication_proof_plaintext_ciphertext::*,
     range_proof::{ChallengeBits, EncryptedPairs, Proof, RangeProof},
     range_proof_ni::RangeProofNi,
     verlin_proof::*,

@@ -25,6 +25,9 @@ bit-vec = "0.6"
 sha2 = "0.9"
 digest = "0.9"
 thiserror = "1"
+rug = "1.12"
+
+
 
 [dependencies.curv-kzen]
 version = "0.10"
