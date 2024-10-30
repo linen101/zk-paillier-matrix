@@ -70,24 +70,30 @@ pub struct GadgetThree {
     //pub share_range: RangeProofNi,
 }
 impl GadgetThree {
-    pub fn protocol(a:&BigInt, ekj: &EncryptionKeyJoint, sk_shares: &DecryptionKeyShared, pis: &NumParties, spdz_modulus: &BigInt) -> Self{
-        // STEP 1:
+    pub fn protocol(a:&BigInt, ekj: &EncryptionKeyJoint, sk_shares: &DecryptionKeyShared, parties: &NumParties, spdz_modulus: &BigInt) -> Self{
+
         let mut masks: Vec<BigInt> = Vec::new();
-        let mut randoms: Vec<BigInt> = Vec::new();
+        let mut randoms_masks: Vec<BigInt> = Vec::new();
+        let mut randoms_shares: Vec<BigInt> = Vec::new();
         let mut encrypted_masks: Vec<BigInt> = Vec::new();
+        let mut shares: Vec<BigInt> = vec![BigInt::from(0); parties.m];
+        let mut enc_shares: Vec<BigInt> = vec![BigInt::from(0); parties.m];
+        // STEP 1:
         // each party generates a random value ri ∈ [0, 2^{|p|+κ} ]
-        for i in 0..N_PARTIES{
+        for i in 0..parties.m{
             let m = gen_mask();
             masks.push(m);
             // create randomnesses for encryptions
-            let r = sample_paillier_random(&ekj.n);
-            randoms.push(r);
+            let r1 = sample_paillier_random(&ekj.n);
+            randoms_masks.push(r1);
+            let r2 = sample_paillier_random(&ekj.n);
+            randoms_shares.push(r2);
         }
-        for i in 0..N_PARTIES{
+        for i in 0..parties.m{
             let e_m = Paillier::encrypt_with_chosen_randomness(
                 &EncryptionKey::from(ekj),
                 RawPlaintext::from(masks[i].clone()),
-                &Randomness(randoms[i].clone()),
+                &Randomness(randoms_masks[i].clone()),
             )
             .0
             .into_owned();
@@ -107,24 +113,36 @@ impl GadgetThree {
         // each party takes as input {Enc_pk(r_i)}_{i \in [m]}
         // and compputes the product with Enc_pk(a)
         // the result is Enc_pk(a + Σ r_i)
-        let zero = BigInt::from(0);
-        let mut c: Vec<BigInt> = vec![zero; N_PARTIES];
+        let mut c: Vec<BigInt> = vec![BigInt::from(0); parties.m];
         // double for loop is to show that each party does the computation of c.
-        for i in 0..N_PARTIES{
+        for i in 0..parties.m{
             c[i] = a.clone();
             //BigInt::mod_mul(&a, &encrypted_masks[1], &ekj.nn);
-            for j in 1..N_PARTIES{
+            for j in 1..parties.m{
                 let c1 = encrypted_masks[j].clone();
                 c[i] = BigInt::mod_mul(&c1, &c[i], &ekj.nn);
             } 
         }
         // STEP 3: jointly decrypt c to get plaintext b
-        let b_raw = Paillier::joint_decrypt(ekj, sk_shares, pis, &RawCiphertext::from(c[0].clone()));
+        let b_raw = Paillier::joint_decrypt(ekj, sk_shares, parties, &RawCiphertext::from(c[0].clone()));
         let b = BigInt::from(b_raw);
 
         // STEP 4: Create shares of a using the masked b.
-
-        GadgetThree{shares: sk_shares.dks.clone()}
+        // Party 0 sets a0 = b − r0 mod p. Every other party sets ai ≡ −ri mod p.
+        shares[0] = BigInt::mod_sub(&b, &masks[0], spdz_modulus);
+        for i in 1..parties.m{
+            shares[i] = BigInt::mod_sub(&BigInt::from(0), &masks[i], spdz_modulus);
+        }
+        // STEP 5: Each party publishes EncPK(ai) as well as an interval proof of plaintext knowledge.
+        for i in 0..parties.m{
+            enc_shares[i] = BigInt::from
+                (Paillier::encrypt_with_chosen_randomness(
+                    &EncryptionKey::from(ekj),
+                    RawPlaintext::from(shares[i].clone()),
+                    &Randomness(randoms_shares[i].clone()),)
+                );
+        }
+        GadgetThree{shares: enc_shares.clone()}
     }
 }
 

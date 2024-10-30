@@ -25,7 +25,7 @@ pub struct DecryptionKeyJoint {
 }
 
 pub struct NumParties{
-    m:usize,
+    pub m:usize,
 }    
 
 /// Private shared decryption key.
