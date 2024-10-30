@@ -10,7 +10,11 @@ use paillier::{EncryptionKey, DecryptionKey, Paillier, KeyGeneration, Keypair, R
 use curv::arithmetic::traits::*;
 use curv::BigInt;
 use crate::zkproofs::traits::*;
+use crate::zkproofs::array::*;
+use crate::zkproofs::multiplication_proof_plaintext_ciphertext::*;
 
+use rayon::prelude::*; // parallelization
+//[DONE: ADD PLAINTEXT CIPHERTEXT MULTIPLICATION PROOF IN PARTIAL DECRYPTION]
 
 /// Public encryption key.
 pub struct EncryptionKeyJoint {
@@ -40,11 +44,43 @@ impl<'c, 'm> DecryptJoint<EncryptionKeyJoint, DecryptionKeyShared, NumParties, &
         let ciphertext = c.clone().0.into_owned();
         let mut partial_c: Vec<BigInt> = vec![BigInt::from(0); p.m];
         let mut dec_c: BigInt = BigInt::from(1);
+        //prover
+        let r_c : Vec<BigInt> = vec![BigInt::from(1); p.m];
+        let r_b = ArrayPaillier::gen_array_randomness(p.m, &EncryptionKey::from(ek));
+        let e_b = ArrayPaillier::encrypt_array(&dk.dks, &r_b, &EncryptionKey::from(ek));
         for i in 0..p.m{
             // ci = c^{sk_i}
             let ci = BigInt::mod_pow(&ciphertext, &dk.dks[i], &ek.nn);
-            partial_c[i] = ci
+            partial_c[i] = ci;
         }
+
+         //zk that the multiplication is performed correctly.
+        (0..p.m).into_par_iter().for_each(|i| {
+        
+            let witness = MulCiphWitness {
+                b:dk.dks[i].clone(),
+                r_b:r_b[i].clone(),
+                r_c:r_c[i].clone(),
+            };
+
+            let statement = MulCiphStatement { 
+                ek: EncryptionKey::from(ek).clone(), 
+                e_a: ciphertext.clone(),
+                e_b: e_b[i].clone(), 
+                e_c: partial_c[i].clone() 
+            };
+
+            let proof = MulCiphProof::prove(&witness, &statement);
+            (0..p.m)
+            .into_par_iter()
+            .filter(|&j| j != i) // Filter out j == i
+            .for_each(|j| {
+                let verify = proof.verify(&statement);
+                assert!(verify.is_ok());
+                
+            });  
+        });    
+        
         for i in 0..p.m{
             dec_c = BigInt::mod_mul(&dec_c, &partial_c[i], &ek.nn);
         }

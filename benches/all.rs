@@ -1,19 +1,76 @@
-use paillier::{Paillier, EncryptionKey};
-use paillier::traits::KeyGeneration;
+use paillier::{Paillier, EncryptionKey, RawPlaintext, Randomness};
+use paillier::traits::{KeyGeneration, EncryptWithChosenRandomness};
 use zk_paillier::zkproofs::*;
+use std::str::FromStr;
 use curv::BigInt;
 use curv::arithmetic::traits::Samplable;
 use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
 use std::time::Instant;
+use rayon::prelude::*; 
+
 
 const RANGE_BITS: usize = 32; //for elliptic curves with 256bits for example
 const SECURITY_PARAMETER: usize = 128;
+
 
 fn gen_keys() -> EncryptionKey{
     let (ek, _) = Paillier::keypair().keys();
 
     // Return  the encryption key 
     ek
+}
+
+fn benchmark_gadget3(array_size: usize, spdz_mod: &BigInt, parties: &NumParties){
+    // generate classic paillier keys
+    let (ek, dk) = Paillier::keypair_safe_primes().keys();
+    // public modulus n
+    let n = ek.n.clone();
+    // public modulus n^2
+    let nn = ek.nn.clone();
+
+    // create necessary parameters for joint decryption Paillier 
+    // and put them inside public and private key
+    let (ekj, dkj) = Paillier::joint_dec_params(&ek, &dk);
+
+    // create shared secret key     
+    let shares = Paillier::additive_shares(&ekj, &dkj, parties).dks;
+    let sk_shares = DecryptionKeyShared{
+        dks: shares,
+    };
+    /*/ test values
+    let x = BigInt::from(17);
+
+    let r = BigInt::sample_below(&ek.n);
+    let ciphertext = Paillier::encrypt_with_chosen_randomness(
+        &ek,
+        RawPlaintext::from(x.clone()),
+        &Randomness::from(r.clone()),
+    );
+    let a = BigInt::from(ciphertext);
+    */
+    let n = array_size;
+    
+    let range = BigInt::sample(RANGE_BITS);
+    // Key generation
+    let ek = gen_keys();
+
+    // generate and encrypt array X
+    let array_x = ArrayPaillier::gen_array_no_range(n, &EncryptionKey::from(&ekj));
+    let array_r_x = ArrayPaillier::gen_array_randomness(n, &EncryptionKey::from(&ekj));
+    let array_e_x = ArrayPaillier::encrypt_array(&array_x, &array_r_x, &EncryptionKey::from(&ekj));  
+    
+    
+    
+    // Measure gadget3 time without keygeneration and key sharing benchmarks
+    let start = Instant::now();
+    (0..n).into_par_iter().for_each(|i| {
+    
+        GadgetThree::protocol(&array_e_x[i], &ekj, &sk_shares, parties, spdz_mod);
+    });
+    let duration = start.elapsed();
+
+    println!("Time elapsed in gadget3: {:?}", duration);
+
 }
 
 fn benchmark_prove_verify(matrix_size: (usize, usize)) {
@@ -58,7 +115,7 @@ fn benchmark_prove_verify(matrix_size: (usize, usize)) {
     MatrixDots::matrix_dots_mul_prove_verify(&matrix_statement, &matrix_witness);
     let duration = start.elapsed();
 
-    println!("Time elapsed for matrix size ({}, {}) during proving/verifying: {:?}", n, d, duration);
+    println!("Time elapsed for matrix size ({}, {}) during proving/verifying MATRIX PLAINTEXT MUL: {:?}", n, d, duration);
 }
 
 fn benchmark_enc_prove_verify(matrix_size: (usize, usize)) {
@@ -98,7 +155,7 @@ fn benchmark_enc_prove_verify(matrix_size: (usize, usize)) {
     EncMatrixDots::matrix_dots_mul_prove_verify(&matrix_ciph_statement, &matrix_ciph_witness);
     let duration = start.elapsed();
 
-    println!("Time elapsed for matrix size ({}, {}) in encrypted proving/verifying: {:?}", n, d, duration);
+    println!("Time elapsed for matrix size ({}, {}) in encrypted proving/verifying MATRIX CIPHERTEXT MULT: {:?}", n, d, duration);
 }
 
 
@@ -130,7 +187,7 @@ fn benchmark_range_prove_verify(array_size: usize) {
     ArrayRangeProofNi::array_range_prove_verify(&statement, &witness);
     let duration = start.elapsed();
 
-    println!("Time elapsed for array size ({}) during proving/verifying: {:?}", n, duration);
+    println!("Time elapsed for array size ({}) during proving/verifying RANGE: {:?}", n, duration);
 }
 
 
@@ -143,11 +200,11 @@ fn benchmark_matrices(c: &mut Criterion) {
     let sizes = vec![(10, 2)];
 
     for size in sizes {
-        group.bench_function(&format!("prove_verify_{:?}", size), |b| {
+        group.bench_function(&format!("prove_verify_MATRIX_PLAINTEXT_PLAINTEXT_{:?}", size), |b| {
             b.iter(|| benchmark_prove_verify(black_box(size)));
         });
 
-        group.bench_function(&format!("enc_prove_verify_{:?}", size), |b| {
+        group.bench_function(&format!("enc_prove_verify_MATRIX_PLAINTEXT_CIPHERTEXT_{:?}", size), |b| {
             b.iter(|| benchmark_enc_prove_verify(black_box(size)));
         });
     }
@@ -164,7 +221,7 @@ fn benchmark_array_range(c: &mut Criterion) {
     let sizes: Vec<usize> = vec![ 10];
 
     for size in sizes {
-        group.bench_function(&format!("prove_verify_{:?}", size), |b| {
+        group.bench_function(&format!("prove_verify_RANGE_{:?}", size), |b| {
             b.iter(|| benchmark_range_prove_verify(black_box(size)));
         });
     }
@@ -172,8 +229,26 @@ fn benchmark_array_range(c: &mut Criterion) {
 
 }
 
+fn benchmark_gadget3_exec(c: &mut Criterion) {
+    let mut group = c.benchmark_group("Gadget3");
+    let parties = NumParties{m: 3};
+    let spdz_mod:BigInt = BigInt::from(3305569710899353_u64);
+    // Reduce the sample size to avoid long running benchmarks
+    group.sample_size(10);  // Reduce sample size here
 
-criterion_group!(benches, benchmark_array_range);
+    let sizes: Vec<usize> = vec![ 1];
+
+    for size in sizes {
+        group.bench_function(&format!("gadget3_{:?}", size), |b| {
+            b.iter(|| benchmark_gadget3(black_box(size), &spdz_mod, &parties ));
+        });
+    }
+    group.finish();
+
+}
+
+
+criterion_group!(benches, benchmark_gadget3_exec);
 criterion_main!(benches);
 
 

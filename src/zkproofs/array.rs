@@ -32,6 +32,19 @@ impl ArrayPaillier {
         array_a
     }
 
+    pub fn gen_array_no_range(n:usize, ek: &EncryptionKey) -> Vec<BigInt>{
+        // Define a array A with dimension n  with random BigInt values < range
+        let mut array_a: Vec<BigInt> = Vec::new();
+
+        // Populate the array with random values with random values within range
+        for _ in 0..n {
+            let random_value = BigInt::sample_below(&ek.n); // Generate random value for each element within range
+            array_a.push(random_value);
+        }
+
+        // Return  the matrix
+        array_a
+    }
     pub fn gen_array_randomness(n: usize, ek: &EncryptionKey) -> Vec<BigInt>{
         let mut randoms: Vec<BigInt> = Vec::new();
         for _ in 0..n {

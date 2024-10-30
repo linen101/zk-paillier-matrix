@@ -11,9 +11,12 @@ use curv::BigInt;
 use super::errors::IncorrectProof;
 use super::DecryptJoint;
 use crate::zkproofs::joint_decryption::*;
+use crate::zkproofs::range_proof_ni::*;
 use crate::zkproofs::array::*;
 use crate::zkproofs::utils::*;
-
+use rayon::prelude::*;
+//[DONE: ADD RANGE PROOFS IN STEP 1]
+//[TODO: ADD RANGE PROOFS IN STEP 5]
 
 /// 
 /// Gadget 3. 
@@ -45,7 +48,6 @@ const MOD_BITS: u32 = 64;
 // κ = 40
 const K_PARAMETER: u32 = 40;
 // m = 3, e.g. helen is run among 3 parties.
-const N_PARTIES: usize = 3; 
 
 // derive encryption key from joint encryption key to use the encryption method for paillier
 impl<'e> From<&'e EncryptionKeyJoint> for EncryptionKey {
@@ -100,6 +102,34 @@ impl GadgetThree {
             // Add the encrypted element to the encrypted array
             encrypted_masks.push(e_m);
         }
+
+        //zk that the mask is chosen correctly within range with range_proof_ni (Lindell et al 2017).
+        (0..parties.m).into_par_iter().for_each(|i| {
+            let witness = RangeWitness{
+                x: masks[i].clone(),
+                r_x:randoms_masks[i].clone(),    
+            };
+        
+            let statement = RangeStatement { 
+                ek: EncryptionKey::from(ekj).clone(), 
+                range: range(), 
+                e_x:encrypted_masks[i].clone() 
+            };
+        
+            let proof = RangeProofNi::prove(&witness, &statement);
+            (0..parties.m)
+            .into_par_iter()
+            .filter(|&j| j != i) // Filter out j == i
+            .for_each(|j| {
+                let verify = proof.verify(&statement);
+                
+                if verify.is_err() {
+                    eprintln!("Verification failed for party {} with: mask = {:?}", i, masks[i]);
+                }
+
+                assert!(verify.is_ok(), "Proof failed for element at index {}", i);
+            });
+        });
         
         // publish encrypted masks: publish enc(r_i) ?
         // Rust’s standard library provides threads for concurrency 
@@ -146,10 +176,17 @@ impl GadgetThree {
     }
 }
 
+fn range()-> BigInt {
+    let bit_len = MOD_BITS + K_PARAMETER;
+    let big_val = BigInt::pow(&BigInt::from(2),bit_len);
+    big_val
+}
+
 fn gen_mask() -> BigInt {
     let bit_len = MOD_BITS + K_PARAMETER;
     let big_val = BigInt::pow(&BigInt::from(2),bit_len);
-    let upper = BigInt::pow(&BigInt::from(2),bit_len);
+    // this is for the range proof which currently has slack 1/3 from Lindel et all 2017.
+    let upper = big_val.div_floor(&BigInt::from(3));
     let r = BigInt::sample_below(&upper);
     r
 }
