@@ -22,37 +22,46 @@ mod range_proof_ni;
 mod verlin_proof;
 mod wi_dlog_proof;
 mod zero_enc_proof;
-
 mod errors;
 mod utils;
-mod multiplication_proof_plaintext_ciphertext;
-mod matrix;
+
+// new
 mod array;
 mod array_range_proof_ni;
+mod boudot_range_proof;
+mod fujisaki_okamoto_commitment;
+mod gadget3;
+mod matrix;
 mod matrix_multiplication_proof;
 mod matrix_multiplication_proof_plaintext_ciphertext;
-
-mod fujisaki_okamoto_commitment;
+mod multiplication_proof_plaintext_ciphertext;
+mod joint_decryption;
+mod traits;
 
 pub use self::{
-    array::*,
-    array_range_proof_ni::*,
     correct_ciphertext::*,
     correct_key::{Challenge, CorrectKey, CorrectKeyProof, VerificationAid},
     correct_key_ni::{NiCorrectKeyProof, SALT_STRING},
     correct_message::CorrectMessageProof,
     correct_opening::CorrectOpening,
+    range_proof::{ChallengeBits, EncryptedPairs, Proof, RangeProof},
+    range_proof_ni::RangeProofNi,
+    joint_decryption::*,
+    verlin_proof::*,
+    wi_dlog_proof::*,
+    zero_enc_proof::*,
+    // new 
+    array::*,
+    array_range_proof_ni::*,
+    boudot_range_proof::*,
     fujisaki_okamoto_commitment::*,
+    gadget3::*,
     matrix::*,
     matrix_multiplication_proof::*,
     matrix_multiplication_proof_plaintext_ciphertext::*,
     multiplication_proof::*,
     multiplication_proof_plaintext_ciphertext::*,
-    range_proof::{ChallengeBits, EncryptedPairs, Proof, RangeProof},
-    range_proof_ni::RangeProofNi,
-    verlin_proof::*,
-    wi_dlog_proof::*,
-    zero_enc_proof::*,
+    traits::*,
 };
 
 pub use self::{errors::IncorrectProof, utils::compute_digest};

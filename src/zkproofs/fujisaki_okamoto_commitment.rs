@@ -24,19 +24,19 @@ fn gen_g_h(ek: &EncryptionKey) -> (BigInt, BigInt) {
 
 
 pub struct Commitment {
-    m: BigInt,
-    r: BigInt,  // The random blinding factor used in the commitment
+    pub m: BigInt,
+    pub r: BigInt,  // The random blinding factor used in the commitment
 }
 
 pub struct PublicParamsCom {
-    g: BigInt,
-    h: BigInt,
-    n: BigInt,
+    pub g: BigInt,
+    pub h: BigInt,
+    pub n: BigInt,
 }
 
 impl Commitment {
 // Commitment function: Com(m, r) = g^m h^r mod N
-    fn commitment(com: &Commitment, pp: &PublicParamsCom) -> BigInt {
+    pub fn commitment(com: &Commitment, pp: &PublicParamsCom) -> BigInt {
         let gm = BigInt::mod_pow(&pp.g, &com.m, &pp.n);  // g^m mod N
         let hr = BigInt::mod_pow(&pp.h, &com.r, &pp.n);  // h^r mod N
         let com = BigInt::mod_pow(&gm, &hr, &pp.n);

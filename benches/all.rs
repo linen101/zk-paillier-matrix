@@ -5,6 +5,7 @@ use curv::BigInt;
 use curv::arithmetic::traits::Samplable;
 use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
 use std::time::Instant;
+
 const RANGE_BITS: usize = 32; //for elliptic curves with 256bits for example
 const SECURITY_PARAMETER: usize = 128;
 
