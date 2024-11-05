@@ -289,6 +289,9 @@ fn benchmark_gadget3_exec(c: &mut Criterion) {
 }
 
 fn benchmark_gadget4_exec(c: &mut Criterion) {
+
+    use curv::arithmetic::traits::*;
+    use curv::BigInt;
     let mut group = c.benchmark_group("Gadget3");
     let parties = NumParties{m: 3};
     let spdz_mod:BigInt = BigInt::from_str_radix("12492985848356528369", 10).unwrap();
