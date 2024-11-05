@@ -2,7 +2,7 @@ use std::iter;
 
 use serde::{Deserialize, Serialize};
 
-use paillier::{EncryptionKey, Paillier, KeyGeneration, RawPlaintext, RawCiphertext, Randomness};
+use paillier::{EncryptionKey, Paillier, RawPlaintext, RawCiphertext, Randomness};
 use paillier::EncryptWithChosenRandomness;
 
 use curv::arithmetic::traits::*;
@@ -12,11 +12,10 @@ use super::errors::IncorrectProof;
 use super::DecryptJoint;
 use crate::zkproofs::joint_decryption::*;
 use crate::zkproofs::range_proof_ni::*;
-use crate::zkproofs::array::*;
 use crate::zkproofs::utils::*;
 use rayon::prelude::*;
 //[DONE: ADD RANGE PROOFS IN STEP 1]
-//[TODO: ADD RANGE PROOFS IN STEP 5]
+//[done: ADD RANGE PROOFS IN STEP 5]
 
 /// 
 /// Gadget 3. 
@@ -47,16 +46,7 @@ use rayon::prelude::*;
 const MOD_BITS: u32 = 64; 
 // κ = 40
 const K_PARAMETER: u32 = 40;
-// m = 3, e.g. helen is run among 3 parties.
 
-// derive encryption key from joint encryption key to use the encryption method for paillier
-impl<'e> From<&'e EncryptionKeyJoint> for EncryptionKey {
-    fn from(ekj: &'e EncryptionKeyJoint) -> Self {
-        let nn = ekj.nn.clone();
-        let n = ekj.n.clone();
-        EncryptionKey { n, nn }
-    }
-}
 
 
 
@@ -66,24 +56,27 @@ pub struct GadgetThreeSingleParty {
     //pub share_range: RangeProofNi,
 }
 
-#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GadgetThree {
-    pub shares: Vec<BigInt>,
+    pub a_shares: Vec<BigInt>,
+    pub e_a: BigInt,
+    pub range_proof_shares: Vec<RangeProofNi>,
     //pub share_range: RangeProofNi,
 }
 impl GadgetThree {
-    pub fn protocol(a:&BigInt, ekj: &EncryptionKeyJoint, sk_shares: &DecryptionKeyShared, parties: &NumParties, spdz_modulus: &BigInt) -> Self{
+    pub fn protocol(e_a:&BigInt, ekj: &EncryptionKeyJoint, sk_shares: &DecryptionKeyShared, parties: &NumParties, spdz_modulus: &BigInt) -> Self{
 
-        let mut masks: Vec<BigInt> = Vec::new();
-        let mut randoms_masks: Vec<BigInt> = Vec::new();
-        let mut randoms_shares: Vec<BigInt> = Vec::new();
-        let mut encrypted_masks: Vec<BigInt> = Vec::new();
+        let mut masks: Vec<BigInt> = vec![BigInt::from(0); parties.m];
+        let mut randoms_masks: Vec<BigInt> = vec![BigInt::from(0); parties.m];
+        let mut randoms_shares: Vec<BigInt> = vec![BigInt::from(0); parties.m];
+        let mut encrypted_masks: Vec<BigInt> = vec![BigInt::from(0); parties.m];
         let mut shares: Vec<BigInt> = vec![BigInt::from(0); parties.m];
         let mut enc_shares: Vec<BigInt> = vec![BigInt::from(0); parties.m];
+        let mut proof_shares: Vec<RangeProofNi> = Vec::new();
         // STEP 1:
         // each party generates a random value ri ∈ [0, 2^{|p|+κ} ]
         for i in 0..parties.m{
-            let m = gen_mask();
+            let m = gen_mask(&MOD_BITS);
             masks.push(m);
             // create randomnesses for encryptions
             let r1 = sample_paillier_random(&ekj.n);
@@ -91,7 +84,7 @@ impl GadgetThree {
             let r2 = sample_paillier_random(&ekj.n);
             randoms_shares.push(r2);
         }
-        for i in 0..parties.m{
+        encrypted_masks.par_iter_mut().enumerate().for_each(|(i, x)|{
             let e_m = Paillier::encrypt_with_chosen_randomness(
                 &EncryptionKey::from(ekj),
                 RawPlaintext::from(masks[i].clone()),
@@ -100,8 +93,8 @@ impl GadgetThree {
             .0
             .into_owned();
             // Add the encrypted element to the encrypted array
-            encrypted_masks.push(e_m);
-        }
+            *x = e_m;
+        });
 
         //zk that the mask is chosen correctly within range with range_proof_ni (Lindell et al 2017).
         (0..parties.m).into_par_iter().for_each(|i| {
@@ -112,7 +105,7 @@ impl GadgetThree {
         
             let statement = RangeStatement { 
                 ek: EncryptionKey::from(ekj).clone(), 
-                range: range(), 
+                range: range(&MOD_BITS), 
                 e_x:encrypted_masks[i].clone() 
             };
         
@@ -146,7 +139,7 @@ impl GadgetThree {
         let mut c: Vec<BigInt> = vec![BigInt::from(0); parties.m];
         // double for loop is to show that each party does the computation of c.
         for i in 0..parties.m{
-            c[i] = a.clone();
+            c[i] = e_a.clone();
             //BigInt::mod_mul(&a, &encrypted_masks[1], &ekj.nn);
             for j in 1..parties.m{
                 let c1 = encrypted_masks[j].clone();
@@ -159,31 +152,67 @@ impl GadgetThree {
 
         // STEP 4: Create shares of a using the masked b.
         // Party 0 sets a0 = b − r0 mod p. Every other party sets ai ≡ −ri mod p.
-        shares[0] = BigInt::mod_sub(&b, &masks[0], spdz_modulus);
+        let spdz_mod_range = spdz_modulus.div_floor(&BigInt::from(3));
+        shares[0] = BigInt::mod_sub(&b, &masks[0], &spdz_mod_range);
         for i in 1..parties.m{
-            shares[i] = BigInt::mod_sub(&BigInt::from(0), &masks[i], spdz_modulus);
+            shares[i] = BigInt::mod_sub(&BigInt::from(0), &masks[i], &spdz_mod_range);
         }
         // STEP 5: Each party publishes EncPK(ai) as well as an interval proof of plaintext knowledge.
-        for i in 0..parties.m{
-            enc_shares[i] = BigInt::from
+        enc_shares.par_iter_mut().enumerate().for_each(|(i, x)|{
+            *x = BigInt::from
                 (Paillier::encrypt_with_chosen_randomness(
                     &EncryptionKey::from(ekj),
                     RawPlaintext::from(shares[i].clone()),
                     &Randomness(randoms_shares[i].clone()),)
                 );
+        });
+        //zk that the shares are chosen correctly within range with range_proof_ni (Lindell et al 2017).
+        for i in (0..parties.m) {
+            let witness_shares = RangeWitness{
+                x: shares[i].clone(),
+                r_x:randoms_shares[i].clone(),    
+            };
+        
+            let statement_shares = RangeStatement { 
+                ek: EncryptionKey::from(ekj).clone(), 
+                range: spdz_modulus.clone(), 
+                e_x:enc_shares[i].clone() 
+            };
+        
+            let proof_share = RangeProofNi::prove(&witness_shares, &statement_shares);
+            proof_shares.push(proof_share.clone());
+            
+            (0..parties.m)
+            .into_par_iter()
+            .filter(|&j| j != i) // Filter out j == i
+            .for_each(|j| {
+                let verify = proof_share.verify(&statement_shares);
+                
+                if verify.is_err() {
+                    eprintln!("Verification failed for party {} with share = {:?}", i, shares[i]);
+                }
+
+                assert!(verify.is_ok(), "Proof failed for element at index {}", i);
+            });
         }
-        GadgetThree{shares: enc_shares.clone()}
+        
+
+        GadgetThree{
+            a_shares: enc_shares.clone(),
+            e_a: e_a.clone(),
+            range_proof_shares: proof_shares,
+        }
     }
 }
 
-fn range()-> BigInt {
-    let bit_len = MOD_BITS + K_PARAMETER;
+pub fn range(bits: &u32)-> BigInt {
+    let bit_len = bits + K_PARAMETER;
     let big_val = BigInt::pow(&BigInt::from(2),bit_len);
     big_val
 }
 
-fn gen_mask() -> BigInt {
-    let bit_len = MOD_BITS + K_PARAMETER;
+pub fn gen_mask(bits: &u32) -> BigInt {
+    let bit_len = bits + K_PARAMETER;
     let big_val = BigInt::pow(&BigInt::from(2),bit_len);
     // this is for the range proof which currently has slack 1/3 from Lindel et all 2017.
     let upper = big_val.div_floor(&BigInt::from(3));

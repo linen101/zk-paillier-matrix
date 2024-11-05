@@ -31,6 +31,7 @@ mod array_range_proof_ni;
 mod boudot_range_proof;
 mod fujisaki_okamoto_commitment;
 mod gadget3;
+mod gadget4;
 mod matrix;
 mod matrix_multiplication_proof;
 mod matrix_multiplication_proof_plaintext_ciphertext;
@@ -56,6 +57,7 @@ pub use self::{
     boudot_range_proof::*,
     fujisaki_okamoto_commitment::*,
     gadget3::*,
+    gadget4::*,
     matrix::*,
     matrix_multiplication_proof::*,
     matrix_multiplication_proof_plaintext_ciphertext::*,

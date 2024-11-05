@@ -32,6 +32,16 @@ pub struct NumParties{
     pub m:usize,
 }    
 
+
+// derive encryption key from joint encryption key to use the encryption method for paillier
+impl<'e> From<&'e EncryptionKeyJoint> for EncryptionKey {
+    fn from(ekj: &'e EncryptionKeyJoint) -> Self {
+        let nn = ekj.nn.clone();
+        let n = ekj.n.clone();
+        EncryptionKey { n, nn }
+    }
+}
+
 /// Private shared decryption key.
 #[derive(Clone, Debug, PartialEq)]
 pub struct DecryptionKeyShared {

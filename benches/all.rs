@@ -20,6 +20,47 @@ fn gen_keys() -> EncryptionKey{
     ek
 }
 
+fn benchmark_gadget4(array_size: usize, spdz_mod: &BigInt, parties: &NumParties){
+    // generate classic paillier keys
+    let (ek, dk) = Paillier::keypair_safe_primes().keys();
+
+    // create necessary parameters for joint decryption Paillier 
+    // and put them inside public and private key
+    let (ekj, dkj) = Paillier::joint_dec_params(&ek, &dk);
+
+    // create shared secret key     
+    let shares = Paillier::additive_shares(&ekj, &dkj, parties).dks;
+    let sk_shares = DecryptionKeyShared{
+        dks: shares,
+    };
+
+    let n = array_size;
+    
+    let range = BigInt::sample(RANGE_BITS);
+    // Key generation
+    let ek = gen_keys();
+
+    // generate and encrypt array X
+    let array_x = ArrayPaillier::gen_array_no_range(n, &EncryptionKey::from(&ekj));
+    let array_r_x = ArrayPaillier::gen_array_randomness(n, &EncryptionKey::from(&ekj));
+    let array_e_x = ArrayPaillier::encrypt_array(&array_x, &array_r_x, &EncryptionKey::from(&ekj));  
+    
+    
+    let mut inp: Vec<GadgetThree> =  Vec::new();
+    // Measure gadget3 time without keygeneration and key sharing benchmarks
+    let start = Instant::now();
+    (0..n).into_par_iter().for_each(|i| {
+    
+        let input = GadgetThree::protocol(&array_e_x[i], &ekj, &sk_shares, parties, spdz_mod);
+        GadgetFour::protocol(&input, &ekj, &sk_shares, parties, spdz_mod);
+    });
+    let duration = start.elapsed();
+
+    println!("Time elapsed in gadget3,4: {:?}", duration);
+
+}
+
+
 fn benchmark_gadget3(array_size: usize, spdz_mod: &BigInt, parties: &NumParties){
     // generate classic paillier keys
     let (ek, dk) = Paillier::keypair_safe_primes().keys();
@@ -247,8 +288,24 @@ fn benchmark_gadget3_exec(c: &mut Criterion) {
 
 }
 
+fn benchmark_gadget4_exec(c: &mut Criterion) {
+    let mut group = c.benchmark_group("Gadget3");
+    let parties = NumParties{m: 3};
+    let spdz_mod:BigInt = BigInt::from_str_radix("12492985848356528369", 10).unwrap();
+    // Reduce the sample size to avoid long running benchmarks
+    group.sample_size(10);  // Reduce sample size here
 
-criterion_group!(benches, benchmark_gadget3_exec);
+    let sizes: Vec<usize> = vec![ 1];
+
+    for size in sizes {
+        group.bench_function(&format!("gadget4_{:?}", size), |b| {
+            b.iter(|| benchmark_gadget4(black_box(size), &spdz_mod, &parties ));
+        });
+    }
+    group.finish();
+
+}
+criterion_group!(benches, benchmark_gadget4_exec);
 criterion_main!(benches);
 
 
