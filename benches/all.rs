@@ -316,7 +316,7 @@ fn benchmark_gadget4_exec(c: &mut Criterion) {
     group.finish();
 
 }
-criterion_group!(benches, benchmark_gadget4_exec);
+criterion_group!(benches, benchmark_gadget4_exec, benchmark_array_range, benchmark_matrices);
 criterion_main!(benches);
 
 
