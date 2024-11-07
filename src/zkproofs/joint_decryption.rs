@@ -17,17 +17,18 @@ use rayon::prelude::*; // parallelization
 //[DONE: ADD PLAINTEXT CIPHERTEXT MULTIPLICATION PROOF IN PARTIAL DECRYPTION]
 
 /// Public encryption key.
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct EncryptionKeyJoint {
     pub n: BigInt,
     pub nn: BigInt,
     pub theta: BigInt,
 }
-
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct DecryptionKeyJoint {
     pub sk: BigInt,
     pub beta: BigInt,
 }
-
+#[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
 pub struct NumParties{
     pub m:usize,
 }    

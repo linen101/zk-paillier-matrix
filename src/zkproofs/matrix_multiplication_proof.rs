@@ -9,8 +9,9 @@ use crate::zkproofs::multiplication_proof::MulProof;
 use crate::zkproofs::multiplication_proof::MulStatement;
 use crate::zkproofs::multiplication_proof::MulWitness;
 use crate::zkproofs::multiplication_proof::sample_paillier_random;
+use crate::zkproofs::joint_decryption::NumParties;
+use rayon::prelude::*;
 
-use rayon::prelude::*; // Add this import
 
 /// Τhis proof is a non'interactive proof for matrix multiplication C = AB
 /// when the prover knows both A[n*d], B[d*n].
@@ -53,7 +54,7 @@ pub struct MulDotProducts{
 
 
 impl MatrixDots {
-    pub fn matrix_dots_mul_prove_verify(mstatement: &MatrixStatement, mwitness: &MatrixWitness ) {
+    pub fn matrix_dots_mul_prove_verify(mstatement: &MatrixStatement, mwitness: &MatrixWitness, parties: &NumParties ) {
         let rows_a = mwitness.matrix_a.len();
         let cols_a = mwitness.matrix_a[0].len();
         let rows_b = mwitness.matrix_b.len();
@@ -87,9 +88,16 @@ impl MatrixDots {
                 
                     let statement = MulStatement { ek:mstatement.ek.clone(), e_a:e_a.clone(), e_b:e_b.clone(), e_c:e_c.clone() };
                 
-                    let proof = MulProof::prove(&witness, &statement);
-                    let verify = proof.verify(&statement);
-                    assert!(verify.is_ok());
+                    (0..parties.m).into_par_iter().for_each(|i| {
+                        let proof = MulProof::prove(&witness, &statement);
+                        (0..parties.m)
+                        .into_par_iter()
+                        .filter(|&j| j != i) // Filter out j == i
+                        .for_each(|j| {
+                            let verify = proof.verify(&statement);
+                            assert!(verify.is_ok());
+                        });    
+                    });    
                 });
             });
         });

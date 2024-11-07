@@ -7,7 +7,7 @@ use curv::arithmetic::traits::Samplable;
 use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
 use std::time::Instant;
 use rayon::prelude::*; 
-
+use tokio::sync::broadcast;
 
 const RANGE_BITS: usize = 32; //for elliptic curves with 256bits for example
 const SECURITY_PARAMETER: usize = 128;
@@ -114,7 +114,9 @@ fn benchmark_gadget3(array_size: usize, spdz_mod: &BigInt, parties: &NumParties)
 
 }
 
-fn benchmark_prove_verify(matrix_size: (usize, usize)) {
+fn benchmark_prove_verify(matrix_size: (usize, usize), parties:&NumParties) {
+    // in gadget 1,2 the dimensions of the resulted matrix needed to proof correctness
+    // are [d,d]
     let n = matrix_size.0;
     let d = matrix_size.1;
 
@@ -127,8 +129,10 @@ fn benchmark_prove_verify(matrix_size: (usize, usize)) {
     let matrix_e_a = MatrixPaillier::encrypt_matrix(&matrix_a, &matrix_r_a, &ek);
 
     // generate and encrypt matrix B
-    let matrix_b = MatrixPaillier::gen_matrix(d, n, &ek);
-    let matrix_r_b = MatrixPaillier::generate_randomness(d, n, &ek);
+    // we dont implement the linear transformation described in helen
+    // but the point is that the second matrix is of size [d,1]
+    let matrix_b = MatrixPaillier::gen_matrix(d, 1, &ek);
+    let matrix_r_b = MatrixPaillier::generate_randomness(d, 1, &ek);
     let matrix_e_b = MatrixPaillier::encrypt_matrix(&matrix_b, &matrix_r_b, &ek);
 
     // compute dot products
@@ -153,16 +157,17 @@ fn benchmark_prove_verify(matrix_size: (usize, usize)) {
 
     // Measure proving/verifying time
     let start = Instant::now();
-    MatrixDots::matrix_dots_mul_prove_verify(&matrix_statement, &matrix_witness);
+    MatrixDots::matrix_dots_mul_prove_verify(&matrix_statement, &matrix_witness, parties);
     let duration = start.elapsed();
 
     println!("Time elapsed for matrix size ({}, {}) during proving/verifying MATRIX PLAINTEXT MUL: {:?}", n, d, duration);
 }
 
-fn benchmark_enc_prove_verify(matrix_size: (usize, usize)) {
+fn benchmark_enc_prove_verify(matrix_size: (usize, usize), parties:&NumParties) {
+    // in gadget 1,2 the dimensions of the resulted matrix needed to proof correctness
+    // are [d,d]
     let n = matrix_size.0;
     let d = matrix_size.1;
-
     let ek = gen_keys();
 
     // generate and encrypt matrix A
@@ -171,8 +176,10 @@ fn benchmark_enc_prove_verify(matrix_size: (usize, usize)) {
     let matrix_e_a = MatrixPaillier::encrypt_matrix(&matrix_a, &matrix_r_a, &ek);
 
     // generate and encrypt matrix B
-    let matrix_b = MatrixPaillier::gen_matrix(d, n, &ek);
-    let matrix_r_b = MatrixPaillier::generate_randomness(d, n, &ek);
+    // we dont implement the linear transformation described in helen
+    // but the point is that the second matrix is of size [d,1]
+    let matrix_b = MatrixPaillier::gen_matrix(d, 1, &ek);
+    let matrix_r_b = MatrixPaillier::generate_randomness(d, 1, &ek);
     let matrix_e_b = MatrixPaillier::encrypt_matrix(&matrix_b, &matrix_r_b, &ek);
 
     // Compute encrypted dot products with homomorphism
@@ -193,7 +200,7 @@ fn benchmark_enc_prove_verify(matrix_size: (usize, usize)) {
 
     // Measure proving/verifying time
     let start = Instant::now();
-    EncMatrixDots::matrix_dots_mul_prove_verify(&matrix_ciph_statement, &matrix_ciph_witness);
+    EncMatrixDots::matrix_dots_mul_prove_verify(&matrix_ciph_statement, &matrix_ciph_witness, parties);
     let duration = start.elapsed();
 
     println!("Time elapsed for matrix size ({}, {}) in encrypted proving/verifying MATRIX CIPHERTEXT MULT: {:?}", n, d, duration);
@@ -234,19 +241,20 @@ fn benchmark_range_prove_verify(array_size: usize) {
 
 fn benchmark_matrices(c: &mut Criterion) {
     let mut group = c.benchmark_group("MatrixProving");
+    let parties = NumParties{m: 3};
 
     // Reduce the sample size to avoid long running benchmarks
     group.sample_size(10);  // Reduce sample size here
 
-    let sizes = vec![(10, 2)];
+    let sizes = vec![(10, 10), (25, 25), (75,75), (100, 100)];
 
     for size in sizes {
         group.bench_function(&format!("prove_verify_MATRIX_PLAINTEXT_PLAINTEXT_{:?}", size), |b| {
-            b.iter(|| benchmark_prove_verify(black_box(size)));
+            b.iter(|| benchmark_prove_verify(black_box(size), &parties));
         });
 
         group.bench_function(&format!("enc_prove_verify_MATRIX_PLAINTEXT_CIPHERTEXT_{:?}", size), |b| {
-            b.iter(|| benchmark_enc_prove_verify(black_box(size)));
+            b.iter(|| benchmark_enc_prove_verify(black_box(size), &parties));
         });
     }
     group.finish();
@@ -259,7 +267,7 @@ fn benchmark_array_range(c: &mut Criterion) {
     // Reduce the sample size to avoid long running benchmarks
     group.sample_size(10);  // Reduce sample size here
 
-    let sizes: Vec<usize> = vec![ 10];
+    let sizes: Vec<usize> = vec![ 100, 1000];
 
     for size in sizes {
         group.bench_function(&format!("prove_verify_RANGE_{:?}", size), |b| {
@@ -277,7 +285,7 @@ fn benchmark_gadget3_exec(c: &mut Criterion) {
     // Reduce the sample size to avoid long running benchmarks
     group.sample_size(10);  // Reduce sample size here
 
-    let sizes: Vec<usize> = vec![ 1];
+    let sizes: Vec<usize> = vec![10, 25, 75, 100];
 
     for size in sizes {
         group.bench_function(&format!("gadget3_{:?}", size), |b| {
@@ -298,7 +306,7 @@ fn benchmark_gadget4_exec(c: &mut Criterion) {
     // Reduce the sample size to avoid long running benchmarks
     group.sample_size(10);  // Reduce sample size here
 
-    let sizes: Vec<usize> = vec![ 1];
+    let sizes: Vec<usize> = vec![ 10, 25, 75, 100];
 
     for size in sizes {
         group.bench_function(&format!("gadget4_{:?}", size), |b| {

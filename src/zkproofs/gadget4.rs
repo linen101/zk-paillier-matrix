@@ -17,6 +17,7 @@ use crate::zkproofs::range_proof_ni::*;
 use crate::zkproofs::gadget3::*;
 use crate::zkproofs::utils::*;
 use rayon::prelude::*;
+use tokio::sync::broadcast;
 
 const A_BITS: u32 = 32;
 
@@ -66,47 +67,28 @@ impl GadgetFour {
             false => Err(IncorrectProof),
         }
     }
-    pub fn protocol(inp: &GadgetThree
-                 , ekj: &EncryptionKeyJoint
-                 , sk_shares: &DecryptionKeyShared
-                 , parties: &NumParties
-                 , spdz_modulus: &BigInt) 
-                 -> () 
-    {
-        let mut masks: Vec<BigInt> = Vec::new();
-        let mut randoms_masks: Vec<BigInt> = Vec::new();
-        let mut randoms_shares: Vec<BigInt> = Vec::new();
-        let mut encrypted_masks: Vec<BigInt> = Vec::new();            
-        // step 1:
-        // verify ranges
-
-        // step 2:
-        // each party takes as input {Enc_pk(b_i)}_{i \in [m]}
-        // and compputes their product 
-        // the result is Enc_pk(Σ b_i)
+    pub fn sub_protocol (c: &Vec<BigInt>
+                       , d: &BigInt
+                       , inp: &GadgetThree
+                       , ekj: &EncryptionKeyJoint
+                       , sk_shares: &DecryptionKeyShared
+                       , parties: &NumParties
+                       , spdz_modulus: &BigInt) 
+                       -> () {
         
-        let mut c: Vec<BigInt> = vec![BigInt::from(0); parties.m];
-        // double for loop is to show that each party does the computation of c.
-        for i in 0..parties.m{
-            //BigInt::mod_mul(&a, &encrypted_masks[1], &ekj.nn);
-            for j in 0..parties.m{
-                let c1 = inp.a_shares[j].clone();
-                c[i] = BigInt::mod_mul(&c1, &c[i], &ekj.nn);
-            } 
-        }
-        /* parallel comp
-        (0..parties.m).into_par_iter().for_each(|i| {   
-            c
-        });  */
-        // then computes EncPK(-Σ b_j) (exponentiation with EncPK(n-1)) 
-        let exp = BigInt::sub(&ekj.n, &BigInt::from(1));
-        for i in 0..parties.m{
-            c[i] = BigInt::mod_pow(&c[i], &exp, &ekj.nn); 
-        } 
-        // and finally, c[i] = E_d =  EncPK (a - Σ b_i ) as: The product of EncPK(a) with  EncPK(-Σ b_j)  
-        for i in 0..parties.m{
-            c[i] = BigInt::mod_mul(&c[i], &inp.e_a, &ekj.nn); 
-        }  
+        let mut masks: Vec<BigInt> = vec![BigInt::from(0); parties.m];
+        let mut randoms_masks: Vec<BigInt> = vec![BigInt::from(0); parties.m];
+        let mut randoms_shares: Vec<BigInt> = vec![BigInt::from(0); parties.m];
+        let mut encrypted_masks: Vec<BigInt> = vec![BigInt::from(0); parties.m];     
+        let mut e_d: Vec<BigInt> = vec![BigInt::from(0); parties.m];
+        
+         
+        // and finally, 
+        // for shares: E_d[i] =  EncPK (a - Σ b_i ) as: The product of EncPK(a) with  EncPK(-Σ b_j)  
+        // for macs: E_d[i] = EncPK(Σci - αΣbi)
+        e_d.par_iter_mut().enumerate().for_each(|(i, x)|{
+            *x = BigInt::mod_mul(&c[i], &d, &ekj.nn); 
+        }  );
 
         // Step 3:
         // each party generates a random value ri ∈ [0, 2^{|a|+κ} ]
@@ -119,7 +101,7 @@ impl GadgetFour {
             /* let r2 = sample_paillier_random(&ekj.n);
             randoms_shares.push(r2); */
         }
-        for i in 0..parties.m{
+        encrypted_masks.par_iter_mut().enumerate().for_each(|(i, x)|{
             let e_m = Paillier::encrypt_with_chosen_randomness(
                 &EncryptionKey::from(ekj),
                 RawPlaintext::from(masks[i].clone()),
@@ -128,8 +110,8 @@ impl GadgetFour {
             .0
             .into_owned();
             // Add the encrypted element to the encrypted array
-            encrypted_masks.push(e_m);
-        }
+            *x = e_m;
+        });
 
         //zk that the mask is chosen correctly within range with range_proof_ni (Lindell et al 2017).
         (0..parties.m).into_par_iter().for_each(|i| {
@@ -161,13 +143,13 @@ impl GadgetFour {
         // STEP 4:
         //Each party calculates E_f = E_d Π(ΕncPK(r_i)^p) = EncPK ((a - Σ b_i) + Σ (p r_i) )
         let mut enc_e_f: Vec<BigInt> = vec![BigInt::from(0); parties.m];
-        for i in 0..parties.m{
-            enc_e_f[i] = c[i].clone();
+        enc_e_f.par_iter_mut().enumerate().for_each(|(i, x)|{
+            *x = e_d[i].clone();
             for j in 0..parties.m{
                 let enc_r_p = BigInt::mod_pow(&encrypted_masks[i], spdz_modulus, &ekj.nn);
-                enc_e_f[i] = BigInt::mod_mul(&enc_e_f[i], &enc_r_p, spdz_modulus);
+                *x = BigInt::mod_mul(x, &enc_r_p, spdz_modulus);
             }
-        }
+        });
         
         // STEP 5:
         // joint decryption of E_f to obtain e_f (the masked difference of a - shares of a)
@@ -175,12 +157,80 @@ impl GadgetFour {
         // a ≡ b mod p or a = b + ηp. Thus, if we take the difference of the two ciphertexts, this difference must be ηp 
         let cipher = RawCiphertext::from(enc_e_f[0].clone());
         let e_f = Paillier::joint_decrypt(ekj, sk_shares, parties, &cipher);
-        //up here ok
-        for i in 0..parties.m {
+        
+        //STEP 6: VERIFY e_f divides sdpz_mod.
+        (0..parties.m).into_par_iter().for_each(|i| {
+
             let verify = GadgetFour::verify(&BigInt::from(e_f.clone()), spdz_modulus);
             assert!(verify.is_ok());
+        });
+    }
+    pub fn protocol(inp: &GadgetThree
+                 , ekj: &EncryptionKeyJoint
+                 , sk_shares: &DecryptionKeyShared
+                 , parties: &NumParties
+                 , spdz_modulus: &BigInt) 
+                 -> () 
+    {
+                    
+        // step 1:
+        // verify ranges
+        
+
+        // step 2:
+        // each party takes as input {Enc_pk(b_i)}_{i \in [m]}'
+        // and compputes their product 
+        // the result is Enc_pk(Σ b_i)
+        
+        let mut c: Vec<BigInt> = vec![BigInt::from(0); parties.m];
+        // double for loop is to show that each party does the computation of c.
+        c.par_iter_mut().enumerate().for_each(|(i, x)|{
+            //BigInt::mod_mul(&a, &encrypted_masks[1], &ekj.nn);
+            for j in 0..parties.m{
+                let c1 = inp.a_shares[j].clone();
+                *x = BigInt::mod_mul(&c1, x, &ekj.nn);
+            } 
+        });
+        
+        // then computes c = EncPK(-Σ b_j) (exponentiation with EncPK(n-1)) 
+        let exp = BigInt::sub(&ekj.n, &BigInt::from(1));
+        c.par_iter_mut().enumerate().for_each(|(i, x)|{
+            *x = BigInt::mod_pow(x, &exp, &ekj.nn); 
+        } );
+        // and d = EncPK(a)
+        let d = &inp.e_a;
+        
+        // steps 3-6:
+        // run the subprotcol with extra inputs c = -Σbi, d=EncPK(a)
+        GadgetFour::sub_protocol(&c, &d, inp, ekj, sk_shares, parties, spdz_modulus);
+
+        // check correctness of SPDZ macs
+        // step 2: compute c = EncPK(-αΣbi)
+
+        // compute global mac key alpha by adding the shares.
+        let mut alpha : BigInt = BigInt::from(0);
+        for i in 0..parties.m{
+            alpha = BigInt::mod_add(&alpha, &inp.global_mac_shares[i], spdz_modulus);
         }
-        //assert!(verify.is_ok());   
+        // compute c = EncPK(-αΣbi) by exponetiating c with alpha for each player i. 
+        c.par_iter_mut().enumerate().for_each(|(i, x)|{
+            *x = BigInt::mod_pow(x, &alpha, &ekj.nn);
+        } );
+
+        // compute  d = EncPK(Σci)
+        let mut d: Vec<BigInt> = vec![BigInt::from(0); parties.m];
+        // double for loop is to show that each party does the computation of c.
+        d.par_iter_mut().enumerate().for_each(|(i, x)|{
+
+            //BigInt::mod_mul(&a, &encrypted_masks[1], &ekj.nn);
+            for j in 0..parties.m{
+                let c1 = inp.mac_shares[j].clone();
+                *x = BigInt::mod_mul(&c1, x, &ekj.nn);
+            } 
+        });
+         // steps 3-6:
+        // run the subprotcol with extra inputs c = -Σbi, d=EncPK(a)
+        GadgetFour::sub_protocol(&c, &d[0], inp, ekj, sk_shares, parties, spdz_modulus);
     }
 }
     
@@ -193,14 +243,18 @@ mod tests {
     use paillier::traits::EncryptWithChosenRandomness;
     use paillier::traits::KeyGeneration;
     use paillier::Paillier;
+
+    
     use paillier::RawPlaintext;
-    use std::time::Instant;
+    use tokio::time::Instant;
 
     use crate::zkproofs::gadget3::*;
     use crate::zkproofs::gadget4::*;
     use crate::zkproofs::joint_decryption::*;
     use crate::zkproofs::traits::*;
     use crate::zkproofs::array::*;
+    use tokio::sync::broadcast;
+
     const RANGE_BITS: usize = 32; //for elliptic curves with 256bits for example
 
 
@@ -208,7 +262,6 @@ mod tests {
     fn test_gadget4() {
         let parties = NumParties{m: 3};
         let spdz_mod:BigInt = BigInt::from_str_radix("12492985848356528369", 10).unwrap();
-        // Reduce the sample size to avoid long running benchmarks
         // generate classic paillier keys
         let (ek, dk) = Paillier::keypair_safe_primes().keys();
 

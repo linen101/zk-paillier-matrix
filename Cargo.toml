@@ -26,8 +26,8 @@ sha2 = "0.9"
 digest = "0.9"
 thiserror = "1"
 rug = "1.12"
-
-
+tokio = { version = "1", features = ["full"] }
+futures = "0.3"
 
 [dependencies.curv-kzen]
 version = "0.10"

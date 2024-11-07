@@ -9,8 +9,10 @@ use crate::zkproofs::multiplication_proof_plaintext_ciphertext::MulCiphProof;
 use crate::zkproofs::multiplication_proof_plaintext_ciphertext::MulCiphStatement;
 use crate::zkproofs::multiplication_proof_plaintext_ciphertext::MulCiphWitness;
 use crate::zkproofs::multiplication_proof::sample_paillier_random;
+use crate::zkproofs::joint_decryption::NumParties;
 
-use rayon::prelude::*; // parallelization
+use rayon::prelude::*;
+
 
 
 /// Τhis proof is a non'interactive proof for matrix multiplication C = AB
@@ -54,7 +56,7 @@ pub struct EncDotProducts{
 
 
 impl EncMatrixDots {
-    pub fn matrix_dots_mul_prove_verify(mstatement: &MatrixCiphStatement, mwitness: &MatrixCiphWitness ) {
+    pub fn matrix_dots_mul_prove_verify(mstatement: &MatrixCiphStatement, mwitness: &MatrixCiphWitness, parties: &NumParties ) {
         let rows_a = mstatement.matrix_e_a.len();
         let cols_a = mstatement.matrix_e_a[0].len();
         let rows_b = mwitness.matrix_b.len();
@@ -82,10 +84,16 @@ impl EncMatrixDots {
                     };
                 
                     let statement = MulCiphStatement { ek:mstatement.ek.clone(), e_a:e_a.clone(), e_b:e_b.clone(), e_c:e_c.clone() };
-                
-                    let proof = MulCiphProof::prove(&witness, &statement);
-                    let verify = proof.verify(&statement);
-                    assert!(verify.is_ok());
+                    (0..parties.m).into_par_iter().for_each(|i| {
+                        let proof = MulCiphProof::prove(&witness, &statement);
+                        (0..parties.m)
+                        .into_par_iter()
+                        .filter(|&j| j != i) // Filter out j == i
+                        .for_each(|j| {
+                            let verify = proof.verify(&statement);
+                            assert!(verify.is_ok());
+                        });    
+                    });    
                 });
             });
         });
@@ -98,7 +106,6 @@ impl EncDotProducts {
         let cols_a = e_a[0].len();
         let rows_b = b.len();
         let cols_b = b[0].len();
-
         // ensure the number of columns in A is equal to the number of rows in B
         if cols_a != rows_b {
             panic!("Cannot multiply matrices: incompatible dimensions");
