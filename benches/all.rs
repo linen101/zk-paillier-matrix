@@ -45,18 +45,34 @@ fn benchmark_gadget4(array_size: usize, spdz_mod: &BigInt, parties: &NumParties)
     let array_r_x = ArrayPaillier::gen_array_randomness(n, &EncryptionKey::from(&ekj));
     let array_e_x = ArrayPaillier::encrypt_array(&array_x, &array_r_x, &EncryptionKey::from(&ekj));  
     
-    
-    let mut inp: Vec<GadgetThree> =  Vec::new();
+    let input =  GadgetThree {
+         a: BigInt::from(0),
+         a_shares: vec![BigInt::from(0); parties.m],
+         e_a: BigInt::from(0),
+         range_proof_shares: Vec::new(),
+         mac_shares: vec![BigInt::from(0); parties.m],
+         global_mac_shares: vec![BigInt::from(0); parties.m],
+         spdz_mod: BigInt::from(0),
+        //pub share_range: RangeProofNi,
+    };
+    let mut inp: Vec<GadgetThree>  = vec![input; n];
     // Measure gadget3 time without keygeneration and key sharing benchmarks
     let start = Instant::now();
-    (0..n).into_par_iter().for_each(|i| {
-    
-        let input = GadgetThree::protocol(&array_e_x[i], &ekj, &sk_shares, parties, spdz_mod);
-        GadgetFour::protocol(&input, &ekj, &sk_shares, parties, spdz_mod);
+    inp.par_iter_mut().enumerate().for_each(|(i, x)|{
+        *x = GadgetThree::protocol(&array_e_x[i], &ekj, &sk_shares, parties, spdz_mod);
+        GadgetFour::protocol(x, &ekj, &sk_shares, parties, spdz_mod);
     });
     let duration = start.elapsed();
 
-    println!("Time elapsed in gadget3,4: {:?}", duration);
+    println!("Time elapsed in gadget3: {:?}", duration);
+
+    let start1 = Instant::now();
+    (0..n).into_par_iter().for_each(|i| {
+    
+        GadgetFour::protocol(&inp[i], &ekj, &sk_shares, parties, spdz_mod);
+    });
+    let duration1 = start1.elapsed();
+    println!("Time elapsed in gadget4: {:?}", duration1);
 
 }
 
