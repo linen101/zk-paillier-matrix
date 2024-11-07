@@ -60,7 +60,6 @@ fn benchmark_gadget4(array_size: usize, spdz_mod: &BigInt, parties: &NumParties)
     let start = Instant::now();
     inp.par_iter_mut().enumerate().for_each(|(i, x)|{
         *x = GadgetThree::protocol(&array_e_x[i], &ekj, &sk_shares, parties, spdz_mod);
-        GadgetFour::protocol(x, &ekj, &sk_shares, parties, spdz_mod);
     });
     let duration = start.elapsed();
 
