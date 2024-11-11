@@ -261,7 +261,7 @@ fn benchmark_matrices(c: &mut Criterion) {
     // Reduce the sample size to avoid long running benchmarks
     group.sample_size(10);  // Reduce sample size here
 
-    let sizes = vec![(10, 10), (25, 25), (75,75), (100, 100)];
+    let sizes = vec![(50,50), (100, 100)];
 
     for size in sizes {
         group.bench_function(&format!("prove_verify_MATRIX_PLAINTEXT_PLAINTEXT_{:?}", size), |b| {
@@ -321,7 +321,7 @@ fn benchmark_gadget4_exec(c: &mut Criterion) {
     // Reduce the sample size to avoid long running benchmarks
     group.sample_size(10);  // Reduce sample size here
 
-    let sizes: Vec<usize> = vec![ 10, 25, 75, 100];
+    let sizes: Vec<usize> = vec![ 50];
 
     for size in sizes {
         group.bench_function(&format!("gadget4_{:?}", size), |b| {
@@ -331,7 +331,7 @@ fn benchmark_gadget4_exec(c: &mut Criterion) {
     group.finish();
 
 }
-criterion_group!(benches, benchmark_gadget4_exec, benchmark_array_range, benchmark_matrices);
+criterion_group!(benches, benchmark_gadget4_exec, benchmark_matrices);
 criterion_main!(benches);
 
 
