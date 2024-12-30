@@ -185,6 +185,9 @@ fn benchmark_enc_prove_verify(matrix_size: (usize, usize), parties:&NumParties) 
     let d = matrix_size.1;
     let ek = gen_keys();
 
+    // generate randomness for zero encryption 
+    let matrix_r_d  = MatrixPaillier::generate_randomness(n, d, &ek);
+    
     // generate and encrypt matrix A
     let matrix_a = MatrixPaillier::gen_matrix(n, d, &ek);
     let matrix_r_a = MatrixPaillier::generate_randomness(n, d, &ek);
@@ -198,11 +201,15 @@ fn benchmark_enc_prove_verify(matrix_size: (usize, usize), parties:&NumParties) 
     let matrix_e_b = MatrixPaillier::encrypt_matrix(&matrix_b, &matrix_r_b, &ek);
 
     // Compute encrypted dot products with homomorphism
-    let (matrix_e_c, matrix_r_c) = EncDotProducts::compute_encrypted_dot_products_homo(&matrix_e_a, &matrix_b, &ek);
-
+    let (matrix_e_c, matrix_r_c) = EncMatrixDots::compute_encrypted_dot_products_homo(&matrix_e_a, &matrix_b, &ek, &parties);
+    let e_c = EncMatrixDots{
+        matrix_e_c:matrix_e_c.clone(),
+    };
+    let matrix_e_d = EncMatrixDots::compute_encrypted_matrix_from_dots(&e_c, &ek, &parties);
     let matrix_ciph_witness = MatrixCiphWitness {
         matrix_b,
         matrix_r_b,
+        matrix_r_d,
         matrix_r_c,
     };
 
@@ -210,6 +217,7 @@ fn benchmark_enc_prove_verify(matrix_size: (usize, usize), parties:&NumParties) 
         ek,
         matrix_e_a,
         matrix_e_b,
+        matrix_e_d,
         matrix_e_c,
     };
 

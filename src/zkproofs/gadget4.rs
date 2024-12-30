@@ -51,9 +51,6 @@ const A_BITS: u32 = 32;
 /// 8.
 /// 9.
 /// 
-
-
-
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct GadgetFour {
     pub shares: Vec<BigInt>,
@@ -83,7 +80,6 @@ impl GadgetFour {
         let mut e_d: Vec<BigInt> = vec![BigInt::from(0); parties.m];
         
          
-        // and finally, 
         // for shares: E_d[i] =  EncPK (a - Σ b_i ) as: The product of EncPK(a) with  EncPK(-Σ b_j)  
         // for macs: E_d[i] = EncPK(Σci - αΣbi)
         e_d.par_iter_mut().enumerate().for_each(|(i, x)|{

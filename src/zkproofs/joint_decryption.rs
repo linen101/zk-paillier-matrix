@@ -12,6 +12,7 @@ use curv::BigInt;
 use crate::zkproofs::traits::*;
 use crate::zkproofs::array::*;
 use crate::zkproofs::multiplication_proof_plaintext_ciphertext::*;
+use std::time::Instant;
 
 use rayon::prelude::*; // parallelization
 //[DONE: ADD PLAINTEXT CIPHERTEXT MULTIPLICATION PROOF IN PARTIAL DECRYPTION]
@@ -184,20 +185,25 @@ mod tests {
         let key_shares = DecryptionKeyShared{
             dks: shares,
         };
-        // test values
-        let x = BigInt::from(17);
 
-        let r = BigInt::sample_below(&ek.n);
-        let ciphertext = Paillier::encrypt_with_chosen_randomness(
-            &ek,
-            RawPlaintext::from(x.clone()),
-            &Randomness::from(r.clone()),
-        );
-       
-        let message = Paillier::joint_decrypt(&ekj, &key_shares, &m, &ciphertext).0
-        .into_owned();
+        let len = 25;
+  
+        // generate and encrypt array X
+        let array_x = ArrayPaillier::gen_array_no_range(len, &ek);
+        let array_r_x = ArrayPaillier::gen_array_randomness(len, &ek);
+        let array_e_x = ArrayPaillier::encrypt_array(&array_x, &array_r_x, &ek);
 
-        println!("plaintext is: {message}\n ");
+        // Measure proving/verifying time
+        let start = Instant::now();
+        (0..len).into_par_iter().for_each(|i| {
+            let ciphertext = RawCiphertext::from(array_e_x[i].clone());
+            Paillier::joint_decrypt(&ekj, &key_shares, &m, &ciphertext);
+        });
+        let duration = start.elapsed();
+
+        println!("Time elapsed for array size ({}) during proving/verifying RANGE: {:?}", len, duration);
+
+        
     }
         
 }
