@@ -274,11 +274,11 @@ fn benchmark_range_prove_verify(array_size: usize, parties:&NumParties) {
 
 fn benchmark_matrices(c: &mut Criterion) {
     let mut group = c.benchmark_group("MatrixProving");
-    let parties = NumParties{m: 3};
+    let parties = NumParties{m: 4};
     // Reduce the sample size to avoid long running benchmarks
     //group.sample_size(5);  // Reduce sample size here
 
-    let sizes = vec![(5,5), (10, 10)];
+    let sizes = vec![(25,25), (50, 50), (50, 50), (100, 100)];
 
 
     for size in &sizes {
@@ -309,11 +309,11 @@ fn benchmark_matrices(c: &mut Criterion) {
 fn benchmark_array_range(c: &mut Criterion) {
     let mut group = c.benchmark_group("ArrayRangeProving");
 
-    let num_parties  = 2;
+    let num_parties  = 4;
     // Reduce the sample size to avoid long-running benchmarks
     group.sample_size(10);
 
-    let sizes: Vec<usize> = vec![5, 10];
+    let sizes: Vec<usize> = vec![25, 50, 75, 100];
 
     for size in &sizes {
         group.bench_function(
@@ -329,12 +329,12 @@ fn benchmark_array_range(c: &mut Criterion) {
 
 fn benchmark_gadget3_exec(c: &mut Criterion) {
     let mut group = c.benchmark_group("Gadget3");
-    let parties = NumParties{m: 3};
+    let parties = NumParties{m: 4};
     let spdz_mod:BigInt = BigInt::from(3305569710899353_u64);
     // Reduce the sample size to avoid long running benchmarks
     group.sample_size(10);  // Reduce sample size here
 
-    let sizes: Vec<usize> = vec![10, 25, 75, 100];
+    let sizes: Vec<usize> = vec![ 25, 50, 75, 100];
 
     for size in sizes {
         group.bench_function(&format!("gadget3_{:?}", size), |b| {
@@ -350,12 +350,12 @@ fn benchmark_gadget4_exec(c: &mut Criterion) {
     use curv::arithmetic::traits::*;
     use curv::BigInt;
     let mut group = c.benchmark_group("Gadget3");
-    let parties = NumParties{m: 3};
+    let parties = NumParties{m: 4};
     let spdz_mod:BigInt = BigInt::from_str_radix("12492985848356528369", 10).unwrap();
     // Reduce the sample size to avoid long running benchmarks
     group.sample_size(10);  // Reduce sample size here
 
-    let sizes: Vec<usize> = vec![ 50];
+    let sizes: Vec<usize> = vec![ 25, 50  ,75, 100];
 
     for size in sizes {
         group.bench_function(&format!("gadget4_{:?}", size), |b| {
