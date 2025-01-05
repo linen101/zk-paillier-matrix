@@ -397,7 +397,7 @@ fn benchmark_parties_all(c: &mut Criterion) {
 
             group.bench_function(
                 &format!(
-                    "enc_prove_verify_Gadget1_size_{:?}_parties_{}",
+                    "enc_prove_verify_Gadget1_size_{:?}_parties_{:}",
                     size, num_parties.m
                 ),
                 |b| {
@@ -406,17 +406,18 @@ fn benchmark_parties_all(c: &mut Criterion) {
             );
 
             group.bench_function(
-                &format!("prove_verify_RANGE_size_{:?}_parties_{}",  size, num_parties.m),
+                &format!("prove_verify_RANGE_size_{:?}_parties_{:}",  size, num_parties.m),
                 |b| {
                     b.iter(|| benchmark_range_prove_verify(black_box(first), num_parties ));
                 },
             );
 
-            group.bench_function(&format!("gadget3_{:?}", size), |b| {
+            group.bench_function(
+                &format!("gadget3_{:?}_parties_{:}", size, num_parties.m), |b| {
                 b.iter(|| benchmark_gadget3(black_box(first), &spdz_mod, &num_parties ));
             });
 
-            group.bench_function(&format!("gadget4_{:?}", size), |b| {
+            group.bench_function(&format!("gadget4_{:?}_parties_{:}", size, num_parties.m), |b| {
                 b.iter(|| benchmark_gadget4(black_box(first), &spdz_mod, &num_parties ));
             });
 
