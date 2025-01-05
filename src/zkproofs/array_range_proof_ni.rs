@@ -2,12 +2,10 @@ use serde::{Deserialize, Serialize};
 use curv::arithmetic::traits::*;
 use curv::BigInt;
 
-use paillier::Paillier;
-use paillier::EncryptWithChosenRandomness;
-use paillier::{EncryptionKey, Randomness, RawPlaintext};
+use paillier::{EncryptionKey};
 use crate::zkproofs::range_proof::*;
 use crate::zkproofs::range_proof_ni::*;
-use crate::zkproofs::multiplication_proof::sample_paillier_random;
+use crate::zkproofs::joint_decryption::NumParties;
 use crate::zkproofs::range_proof_ni::RangeStatement;
 
 use rayon::prelude::*; // Add this import
@@ -44,33 +42,39 @@ pub struct ArrayRangeProofNi {
 }
 
 impl ArrayRangeProofNi {
-    pub fn array_range_prove_verify(astatement: &ArrayRangeStatement, awitness: &ArrayRangeWitness ){
+    pub fn array_range_prove_verify(astatement: &ArrayRangeStatement, awitness: &ArrayRangeWitness , parties:&NumParties){
         let len_a = awitness.array_x.len();
        
          // Parallelize the  loop
          //(0..len_a).into_par_iter().for_each(|i| {
-         for i in 0..len_a {   
-            // Access each element in the current array from each array array_x, array_r_x, array_e_x
-            let x = &awitness.array_x[i];
-            let r_x = &awitness.array_r_x[i];
-            let e_x = &astatement.array_e_x[i];
-                    
-            let witness = RangeWitness{
-                x: x.clone(),
-                r_x:r_x.clone(),    
-            };
-        
-            let statement = RangeStatement { ek:astatement.ek.clone(), range:astatement.range.clone(), e_x:e_x.clone() };
-        
-            let proof = RangeProofNi::prove(&witness, &statement);
-            let verify = proof.verify(&statement);
+        (0..parties.m).into_par_iter().for_each(|j| {
+            (0..len_a).into_par_iter().for_each(|i| {  
+                // Access each element in the current array from each array array_x, array_r_x, array_e_x
+                let x = &awitness.array_x[i];
+                let r_x = &awitness.array_r_x[i];
+                let e_x = &astatement.array_e_x[i];
+                        
+                let witness = RangeWitness{
+                    x: x.clone(),
+                    r_x:r_x.clone(),    
+                };
             
-            if verify.is_err() {
-                eprintln!("Verification failed for element {}: x = {:?}", i, x);
-            }
-
-            assert!(verify.is_ok(), "Proof failed for element at index {}", i);
-        }
+                let statement = RangeStatement { ek:astatement.ek.clone(), range:astatement.range.clone(), e_x:e_x.clone() };
+            
+                let proof = RangeProofNi::prove(&witness, &statement);
+                
+                (0..parties.m)
+                        .into_par_iter()
+                        .filter(|&k| k != j) // Filter out j == k
+                        .for_each(|k| {
+                            let verify = proof.verify(&statement);
+                            if verify.is_err() {
+                                eprintln!("Verification failed for element {}: x = {:?}", i, x);
+                            }
+                            assert!(verify.is_ok(), "Proof failed for element at index {}", i);
+                        });                
+            });
+        });
 
     }
 }
@@ -95,6 +99,7 @@ mod tests {
     #[test]
     fn test_prover() {
         let n = 5;
+        let parties = NumParties{m: 3};
         let (ek, _dk) = test_keypair().keys();
         let range = BigInt::sample(RANGE_BITS);
         let array_r = ArrayPaillier::gen_array_randomness(n, &ek);
@@ -112,7 +117,7 @@ mod tests {
             array_e_x:encrypted_array_x,
         };
 
-        ArrayRangeProofNi::array_range_prove_verify(&statement, &witness);
+        ArrayRangeProofNi::array_range_prove_verify(&statement, &witness, &parties);
     }
 /* 
     #[test]

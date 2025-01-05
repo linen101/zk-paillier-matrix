@@ -1,17 +1,21 @@
 use paillier::{Paillier, EncryptionKey, RawPlaintext, Randomness};
 use paillier::traits::{KeyGeneration, EncryptWithChosenRandomness};
 use zk_paillier::zkproofs::*;
-use std::str::FromStr;
 use curv::BigInt;
 use curv::arithmetic::traits::Samplable;
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkGroup, SamplingMode};
 use std::time::Instant;
 use rayon::prelude::*; 
-use tokio::sync::broadcast;
 
-const RANGE_BITS: usize = 32; //for elliptic curves with 256bits for example
+const RANGE_BITS: usize = 16; //for elliptic curves with 256bits for example
 const SECURITY_PARAMETER: usize = 128;
 
+
+fn custom_criterion() -> Criterion {
+    Criterion::default()
+        //.measurement_time(std::time::Duration::from_millis(100)) // Lower measurement time
+        .sample_size(10) // Specify a smaller sample size
+}
 
 fn gen_keys() -> EncryptionKey{
     let (ek, _) = Paillier::keypair().keys();
@@ -154,12 +158,17 @@ fn benchmark_prove_verify(matrix_size: (usize, usize), parties:&NumParties) {
     let matrix_c = MulDotProducts::compute_plaintext_dot_products(&matrix_a, &matrix_b);
     let (matrix_e_c, matrix_r_c) = MulDotProducts::compute_encrypted_dot_products(&matrix_c, &ek);
 
+    // compute plaintext and encrypted result matrix
+    let result_matrices = MatrixDots::compute_encrypted_matrix_from_plaintext_dots(&matrix_c, &ek, &parties);
+        
     let matrix_witness = MatrixWitness {
         matrix_a,
         matrix_b: matrix_b.clone(), // copy from memory
+        matrix_d: result_matrices.matrix_d.clone(),
         matrix_c: matrix_c.clone(),
         matrix_r_a,
         matrix_r_b: matrix_r_b.clone(),
+        matrix_r_d: result_matrices.matrix_r_d.clone(),
         matrix_r_c: matrix_r_c.clone(),
     };
 
@@ -167,6 +176,7 @@ fn benchmark_prove_verify(matrix_size: (usize, usize), parties:&NumParties) {
         ek: ek.clone(),
         matrix_e_a: matrix_e_a.clone(),
         matrix_e_b: matrix_e_b.clone(),
+        matrix_e_d: result_matrices.matrix_e_d.clone(),
         matrix_e_c: matrix_e_c.clone(),
     };
 
@@ -230,7 +240,7 @@ fn benchmark_enc_prove_verify(matrix_size: (usize, usize), parties:&NumParties) 
 }
 
 
-fn benchmark_range_prove_verify(array_size: usize) {
+fn benchmark_range_prove_verify(array_size: usize, parties:&NumParties) {
     let n = array_size;
   
     let range = BigInt::sample(RANGE_BITS);
@@ -255,7 +265,7 @@ fn benchmark_range_prove_verify(array_size: usize) {
 
     // Measure proving/verifying time
     let start = Instant::now();
-    ArrayRangeProofNi::array_range_prove_verify(&statement, &witness);
+    ArrayRangeProofNi::array_range_prove_verify(&statement, &witness, &parties);
     let duration = start.elapsed();
 
     println!("Time elapsed for array size ({}) during proving/verifying RANGE: {:?}", n, duration);
@@ -265,20 +275,32 @@ fn benchmark_range_prove_verify(array_size: usize) {
 fn benchmark_matrices(c: &mut Criterion) {
     let mut group = c.benchmark_group("MatrixProving");
     let parties = NumParties{m: 3};
-
     // Reduce the sample size to avoid long running benchmarks
-    group.sample_size(10);  // Reduce sample size here
+    //group.sample_size(5);  // Reduce sample size here
 
-    let sizes = vec![(50,50), (100, 100)];
+    let sizes = vec![(5,5), (10, 10)];
 
-    for size in sizes {
-        group.bench_function(&format!("prove_verify_MATRIX_PLAINTEXT_PLAINTEXT_{:?}", size), |b| {
-            b.iter(|| benchmark_prove_verify(black_box(size), &parties));
-        });
 
-        group.bench_function(&format!("enc_prove_verify_MATRIX_PLAINTEXT_CIPHERTEXT_{:?}", size), |b| {
-            b.iter(|| benchmark_enc_prove_verify(black_box(size), &parties));
-        });
+    for size in &sizes {
+        group.bench_function(
+            &format!(
+                "prove_verify_Gadget2_MATRIX_PLAINTEXT_PLAINTEXT_size_{:?}_parties_{}",
+                size, parties.m
+            ),
+            |b| {
+                b.iter(|| benchmark_prove_verify(black_box(*size), &parties));
+            },
+        );
+
+        group.bench_function(
+            &format!(
+                "enc_prove_verify_Gadget1_MATRIX_PLAINTEXT_CIPHERTEXT_size_{:?}_parties_{}",
+                size, parties.m
+            ),
+            |b| {
+                b.iter(|| benchmark_enc_prove_verify(black_box(*size), &parties));
+            },
+        );
     }
     group.finish();
 
@@ -287,19 +309,23 @@ fn benchmark_matrices(c: &mut Criterion) {
 fn benchmark_array_range(c: &mut Criterion) {
     let mut group = c.benchmark_group("ArrayRangeProving");
 
-    // Reduce the sample size to avoid long running benchmarks
-    group.sample_size(10);  // Reduce sample size here
+    let num_parties  = 2;
+    // Reduce the sample size to avoid long-running benchmarks
+    group.sample_size(10);
 
-    let sizes: Vec<usize> = vec![ 100, 1000];
+    let sizes: Vec<usize> = vec![5, 10];
 
-    for size in sizes {
-        group.bench_function(&format!("prove_verify_RANGE_{:?}", size), |b| {
-            b.iter(|| benchmark_range_prove_verify(black_box(size)));
-        });
+    for size in &sizes {
+        group.bench_function(
+            &format!("prove_verify_RANGE_size_{}_parties_{}", size, num_parties),
+            |b| {
+                b.iter(|| benchmark_range_prove_verify(black_box(*size), &NumParties{ m: num_parties} ));
+            },
+        );
     }
     group.finish();
-
 }
+
 
 fn benchmark_gadget3_exec(c: &mut Criterion) {
     let mut group = c.benchmark_group("Gadget3");
@@ -339,7 +365,75 @@ fn benchmark_gadget4_exec(c: &mut Criterion) {
     group.finish();
 
 }
-criterion_group!(benches, benchmark_gadget4_exec, benchmark_matrices);
+
+
+fn benchmark_parties_all(c: &mut Criterion) {
+    use curv::arithmetic::traits::*;
+    use curv::BigInt;
+    let mut group = c.benchmark_group("MatrixProving");
+    let parties = NumParties{m: 3};
+    let spdz_mod:BigInt = BigInt::from_str_radix("12492985848356528369", 10).unwrap();
+
+    // Reduce the sample size to avoid long running benchmarks
+    //group.sample_size(5);  // Reduce sample size here
+
+    let sizes = vec![(10,10)];
+    
+
+    let num_parties_list = vec![NumParties { m: 2 }, NumParties { m: 4 }, NumParties { m: 6 }, NumParties { m: 8 }, NumParties { m: 10}];
+
+    for num_parties in &num_parties_list {
+        for size in &sizes {
+            let (first, second) = *size;
+            group.bench_function(
+                &format!(
+                    "prove_verify_Gadget2_size_{:?}_parties_{}",
+                    size, num_parties.m
+                ),
+                |b| {
+                    b.iter(|| benchmark_prove_verify(black_box(*size), num_parties));
+                },
+            );
+
+            group.bench_function(
+                &format!(
+                    "enc_prove_verify_Gadget1_size_{:?}_parties_{}",
+                    size, num_parties.m
+                ),
+                |b| {
+                    b.iter(|| benchmark_enc_prove_verify(black_box(*size), num_parties));
+                },
+            );
+
+            group.bench_function(
+                &format!("prove_verify_RANGE_size_{:?}_parties_{}",  size, num_parties.m),
+                |b| {
+                    b.iter(|| benchmark_range_prove_verify(black_box(first), num_parties ));
+                },
+            );
+
+            group.bench_function(&format!("gadget3_{:?}", size), |b| {
+                b.iter(|| benchmark_gadget3(black_box(first), &spdz_mod, &num_parties ));
+            });
+
+            group.bench_function(&format!("gadget4_{:?}", size), |b| {
+                b.iter(|| benchmark_gadget4(black_box(first), &spdz_mod, &num_parties ));
+            });
+
+        }
+    }
+    group.finish();
+
+}
+
+
+
+
+criterion_group! {
+    name = benches;
+    config = custom_criterion();
+    targets = benchmark_parties_all, benchmark_matrices,  benchmark_array_range,  benchmark_gadget3_exec, benchmark_gadget4_exec
+}
 criterion_main!(benches);
 
 

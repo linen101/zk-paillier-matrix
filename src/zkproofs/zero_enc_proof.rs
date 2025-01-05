@@ -126,6 +126,7 @@ mod tests {
         let statement = ZeroStatement { ek, c };
 
         let proof = ZeroProof::prove(&witness, &statement);
+        
         let verify = proof.verify(&statement);
         assert!(verify.is_ok());
     }
