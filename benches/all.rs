@@ -1,4 +1,4 @@
-use paillier::{Paillier, EncryptionKey, RawPlaintext, Randomness};
+use paillier::{Paillier, EncryptionKey, RawCiphertext, Randomness};
 use paillier::traits::{KeyGeneration, EncryptWithChosenRandomness};
 use zk_paillier::zkproofs::*;
 use curv::BigInt;
@@ -22,6 +22,42 @@ fn gen_keys() -> EncryptionKey{
 
     // Return  the encryption key 
     ek
+}
+
+fn joint_dec_init(array_size: usize,  parties: &NumParties)  {
+
+    // generate classic paillier keys
+    let (ek, dk) = Paillier::keypair_safe_primes().keys();
+    // public modulus n
+    let n = ek.n.clone();
+    // public modulus n^2
+    let nn = ek.nn.clone();
+
+    // create necessary parameters for joint decryption Paillier 
+    // and put them inside public and private key
+    let (ekj, dkj) = Paillier::joint_dec_params(&ek, &dk);
+
+    // number of parties in the protocol        
+    let shares = Paillier::additive_shares(&ekj, &dkj, &parties).dks;
+    let key_shares = DecryptionKeyShared{
+        dks: shares,
+    };
+
+
+    // generate and encrypt array X
+    let array_x = ArrayPaillier::gen_array_no_range(array_size, &ek);
+    let array_r_x = ArrayPaillier::gen_array_randomness(array_size, &ek);
+    let array_e_x = ArrayPaillier::encrypt_array(&array_x, &array_r_x, &ek);
+
+    // Measure proving/verifying time
+    let start = Instant::now();
+    (0..array_size).into_par_iter().for_each(|i| {
+        let ciphertext = RawCiphertext::from(array_e_x[i].clone());
+        Paillier::joint_decrypt(&ekj, &key_shares, &parties, &ciphertext);
+    });
+    let duration = start.elapsed();
+
+    println!("Time elapsed for array size ({}) during proving/verifying joint decryption of ciphertext: {:?}", array_size, duration);
 }
 
 fn benchmark_gadget4(array_size: usize, spdz_mod: &BigInt, parties: &NumParties){
@@ -78,7 +114,6 @@ fn benchmark_gadget4(array_size: usize, spdz_mod: &BigInt, parties: &NumParties)
     println!("Time elapsed in gadget4: {:?}", duration1);
 
 }
-
 
 fn benchmark_gadget3(array_size: usize, spdz_mod: &BigInt, parties: &NumParties){
     // generate classic paillier keys
@@ -278,7 +313,7 @@ fn benchmark_matrices(c: &mut Criterion) {
     // Reduce the sample size to avoid long running benchmarks
     //group.sample_size(5);  // Reduce sample size here
 
-    let sizes = vec![(25,25), (50, 50), (50, 50), (100, 100)];
+    let sizes = vec![(25,25), (50, 50), (75, 75), (100, 100)];
 
 
     for size in &sizes {
@@ -367,6 +402,23 @@ fn benchmark_gadget4_exec(c: &mut Criterion) {
 }
 
 
+fn benchmark_joint_dec(c: &mut Criterion) {
+    let mut group = c.benchmark_group("JointDec");
+    // Reduce the sample size to avoid long running benchmarks
+    group.sample_size(10);  // Reduce sample size here
+
+    let sizes: Vec<usize> = vec![ 25, 50  ,75, 100];
+    let parties = NumParties{m: 4};
+    for size in sizes {
+        group.bench_function(&format!("joint_dec_{:?}", size), |b| {
+            b.iter(|| joint_dec_init(black_box(size),  &parties ));
+        });
+    }
+    group.finish();
+
+}
+
+
 fn benchmark_parties_all(c: &mut Criterion) {
     use curv::arithmetic::traits::*;
     use curv::BigInt;
@@ -421,6 +473,11 @@ fn benchmark_parties_all(c: &mut Criterion) {
                 b.iter(|| benchmark_gadget4(black_box(first), &spdz_mod, &num_parties ));
             });
 
+            group.bench_function(
+                &format!("joint_dec_{:?}", size), |b| {
+                b.iter(|| joint_dec_init(black_box(first),  &parties ));
+            });
+
         }
     }
     group.finish();
@@ -433,7 +490,7 @@ fn benchmark_parties_all(c: &mut Criterion) {
 criterion_group! {
     name = benches;
     config = custom_criterion();
-    targets = benchmark_parties_all, benchmark_matrices,  benchmark_array_range,  benchmark_gadget3_exec, benchmark_gadget4_exec
+    targets = benchmark_parties_all, benchmark_matrices,  benchmark_array_range,  benchmark_gadget3_exec, benchmark_gadget4_exec, benchmark_joint_dec
 }
 criterion_main!(benches);
 
