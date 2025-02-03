@@ -1,7 +1,6 @@
 use std::f32::RADIX;
 
 use curv::arithmetic::Modulo;
-use serde::{Deserialize, Serialize};
 
 
 use curv::arithmetic::traits::*;
@@ -17,9 +16,21 @@ use crate::zkproofs::matrix::MatrixPaillier;
 use crate::zkproofs::multiplication_proof::sample_paillier_random;
 use crate::zkproofs::joint_decryption::NumParties;
 use rayon::prelude::*;
+use super::utils::*;
 
 use super::EncMatrixDots;
 use super::{ ZeroStatement, ZeroProof, ZeroWitness};
+
+use serde::{Deserialize, Serialize};
+use serde_json;
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream};
+
+use std::sync::Arc;
+use std::{thread, time::Duration};
+
+
+
 
 
 /// Τhis proof is a non'interactive proof for matrix multiplication C = AB
@@ -93,55 +104,53 @@ impl MatrixDots {
         };
         return a;
     }
-    pub fn matrix_dots_mul_prove_verify(mstatement: &MatrixStatement, mwitness: &MatrixWitness, parties: &NumParties ) {
-        let rows_a = mwitness.matrix_a.len();
-        let cols_a = mwitness.matrix_a[0].len();
-        let rows_b = mwitness.matrix_b.len();
-        let cols_b = mwitness.matrix_b[0].len();
-        // Parallelize the outer loop
-        (0..rows_a).into_par_iter().for_each(|i| {
-            (0..cols_b).into_par_iter().for_each(|j| {
-                (0..cols_a).into_par_iter().for_each(|k| {
-                    // Access each element in the current row from each matrix matrix_a, r_a, e_a
-                    let a = &mwitness.matrix_a[i][k];
-                    let r_a = &mwitness.matrix_r_a[i][k];
-                    let e_a = &mstatement.matrix_e_a[i][k];
-
-                    // Access each element in the current column from each matrix matrix_b, r_b, e_b
-                    let b = &mwitness.matrix_b[k][j];
-                    let r_b = &mwitness.matrix_r_b[k][j];
-                    let e_b = &mstatement.matrix_e_b[k][j];
-
-                    let c = &mwitness.matrix_c[i][j][k];
-                    let r_c = &mwitness.matrix_r_c[i][j][k];
-                    let e_c = &mstatement.matrix_e_c[i][j][k];
-                            
+    pub fn matrix_dots_mul_prove_verify(
+        mstatement: &MatrixStatement,
+        mwitness: &MatrixWitness,
+        parties: &NumParties,
+    ) {
+        
+        // Parallelize the matrix operations
+        (0..mwitness.matrix_a.len()).into_par_iter().for_each(|i| {
+            (0..mwitness.matrix_b[0].len()).into_par_iter().for_each(|j| {
+                (0..mwitness.matrix_a[0].len()).into_par_iter().for_each(|k| {
+                    // Prepare the witness and statement
                     let witness = MulWitness {
-                        a:a.clone(),
-                        b:b.clone(),
-                        c:c.clone(),
-                        r_a:r_a.clone(),
-                        r_b:r_b.clone(),
-                        r_c:r_c.clone(),
+                        a: mwitness.matrix_a[i][k].clone(),
+                        b: mwitness.matrix_b[k][j].clone(),
+                        c: mwitness.matrix_c[i][j][k].clone(),
+                        r_a: mwitness.matrix_r_a[i][k].clone(),
+                        r_b: mwitness.matrix_r_b[k][j].clone(),
+                        r_c: mwitness.matrix_r_c[i][j][k].clone(),
                     };
-                
-                    let statement = MulStatement { ek:mstatement.ek.clone(), e_a:e_a.clone(), e_b:e_b.clone(), e_c:e_c.clone() };
-                
+    
+                    let statement = MulStatement {
+                        ek: mstatement.ek.clone(),
+                        e_a: mstatement.matrix_e_a[i][k].clone(),
+                        e_b: mstatement.matrix_e_b[k][j].clone(),
+                        e_c: mstatement.matrix_e_c[i][j][k].clone(),
+                    };
+    
+                    // Proof transmission logic             
                     (0..parties.m).into_par_iter().for_each(|i| {
-                        let proof = MulProof::prove(&witness, &statement);
-                        (0..parties.m)
-                        .into_par_iter()
-                        .filter(|&j| j != i) // Filter out j == i
-                        .for_each(|j| {
-                            let verify = proof.verify(&statement);
-                            assert!(verify.is_ok());
-                        });    
+                       
+                            // Prover generates proof
+                            let proof = MulProof::prove(&witness, &statement);
+    
+                            (0..parties.m)
+                                .into_par_iter()
+                                .filter(|&j| j != i)
+                                .for_each(|j| {
+                                    let verify = proof.verify(&statement);
+                                    assert!(verify.is_ok()); 
+                            });
                     });
-
                 });
             });
         });
+    }
 
+}
         /*  let rows_c = mstatement.matrix_e_c.len();
         let cols_c = mstatement.matrix_e_c[0].len();
         let dots_c = mstatement.matrix_e_c[0][0].len();
@@ -191,9 +200,6 @@ impl MatrixDots {
         });
         */
         
-    }
-}  
-
 
 
 

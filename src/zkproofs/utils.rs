@@ -7,6 +7,36 @@ use digest::Digest;
 use sha2::Sha256;
 use paillier::{DecryptionKey, EncryptionKey, KeyGeneration, Paillier};
 
+
+use serde::{Deserialize, Serialize};
+use serde_json;
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream};
+
+use std::sync::Arc;
+use rayon::prelude::*;
+use std::thread;
+
+use super::multiplication_proof::*;
+pub fn start_listener(port: u16) -> TcpListener {
+    let listener = TcpListener::bind(("127.0.0.1", port)).expect("Failed to bind TCP listener");
+    println!("Listening on port {}", port);
+    listener
+}
+
+
+pub fn send_proof_over_tcp(proof: &MulProof, address: &str) -> std::io::Result<()> {
+    let mut stream = TcpStream::connect(address)?;
+    proof.send(&mut stream)
+}
+
+pub fn receive_proof_over_tcp(listener: &TcpListener) -> std::io::Result<MulProof> {
+    let (mut stream, _) = listener.accept()?;
+    MulProof::receive(&mut stream)
+}
+
+
+
 pub fn compute_digest<IT>(it: IT) -> BigInt
 where
     IT: Iterator,

@@ -1,6 +1,10 @@
 use std::iter;
 
 use serde::{Deserialize, Serialize};
+use serde_json;
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream};
+
 
 use curv::arithmetic::traits::*;
 use curv::BigInt;
@@ -57,6 +61,22 @@ pub struct MulStatement {
 }
 
 impl MulProof {
+    
+    /// Serializes the proof into a JSON string and sends it over a Write stream
+    pub fn send<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
+        let proof_json = serde_json::to_string(self).expect("Failed to serialize proof");
+        writer.write_all(proof_json.as_bytes())?;
+        writer.flush()
+    }
+
+    /// Receives a proof from a Read stream and deserializes it from JSON
+    pub fn receive<R: Read>(reader: &mut R) -> std::io::Result<Self> {
+        let mut proof_json = String::new();
+        reader.read_to_string(&mut proof_json)?;
+        let proof: MulProof = serde_json::from_str(&proof_json).expect("Failed to deserialize proof");
+        Ok(proof)
+}
+
     pub fn prove(witness: &MulWitness, statement: &MulStatement) -> Self {
         // P picks random d, r_d in Z_n
         let d = BigInt::sample_below(&statement.ek.n);
