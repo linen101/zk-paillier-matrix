@@ -10,9 +10,12 @@ use serde::{Deserialize, Serialize};
 use serde_json;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-
+use std::borrow::Borrow
 use std::sync::Arc;
 use std::{thread, time::Duration};
+
+//cargo run  2 10 0
+
 
 pub fn start_listener(port: u16) -> TcpListener {
     let listener = TcpListener::bind(("127.0.0.1", port)).expect("Failed to bind TCP listener");
@@ -163,6 +166,39 @@ fn benchmark_enc_prove_verify(matrix_size: (usize, usize), parties:&NumParties) 
     println!("Time elapsed for matrix size ({}, {}) in encrypted proving/verifying MATRIX CIPHERTEXT MULT: {:?}", n, d, duration);
 }
 
+fn benchmark_enc_dots_homo(matrix_size: (usize, usize), parties:&NumParties) {
+    // in gadget 1,2 the dimensions of the resulted matrix needed to proof correctness
+    // are [d,d]
+    let n = matrix_size.0;
+    let d = matrix_size.1;
+    let ek = gen_keys();
+
+    // generate randomness for zero encryption 
+    let matrix_r_d  = MatrixPaillier::generate_randomness(n, d, &ek);
+    
+    // generate and encrypt matrix A
+    let matrix_a = MatrixPaillier::gen_matrix(n, d, &ek);
+    let matrix_r_a = MatrixPaillier::generate_randomness(n, d, &ek);
+    let matrix_e_a = MatrixPaillier::encrypt_matrix(&matrix_a, &matrix_r_a, &ek);
+
+    // generate and encrypt matrix B
+    // we dont implement the linear transformation described in helen
+    // but the point is that the second matrix is of size [d,1]
+    let matrix_b = MatrixPaillier::gen_matrix(d, 1, &ek);
+    let matrix_r_b = MatrixPaillier::generate_randomness(d, 1, &ek);
+    let matrix_e_b = MatrixPaillier::encrypt_matrix(&matrix_b, &matrix_r_b, &ek);
+    // Measure proving/verifying time
+    let start = Instant::now();
+    // Compute encrypted dot products with homomorphism
+    let (matrix_e_c, matrix_r_c) = EncMatrixDots::compute_encrypted_dot_products_homo(&matrix_e_a, &matrix_b, &ek, &parties);
+    let e_c = EncMatrixDots{
+        matrix_e_c:matrix_e_c.clone(),
+    };
+    let matrix_e_d = EncMatrixDots::compute_encrypted_matrix_from_dots(&e_c, &ek, &parties);
+    let duration = start.elapsed();    
+
+    println!("Time elapsed for matrix size ({}, {}) in encrypted dot products compute: {:?}", n, d, duration);
+}
 
 // Benchmark Range Proof Verification
 fn benchmark_range_prove_verify(array_size: usize, parties: &NumParties) {
@@ -327,17 +363,20 @@ fn main() {
 
     // Execute all benchmarks sequentially
     println!("\n[1] Running Joint Decryption...");
-    //joint_dec_init(matrix_size, &parties);
+    joint_dec_init(matrix_size, &parties);
 
     println!("\n[2] Running Gadget1 Execution...");
-    //benchmark_enc_prove_verify((matrix_size, matrix_size),  &parties);
+    benchmark_enc_prove_verify((matrix_size, matrix_size),  &parties);
 
     println!("\n[2] Running Gadget2 Execution...");
     benchmark_prove_verify((matrix_size, matrix_size), &parties, &player_id, &address, &listener);
 
     println!("\n[3] Running Gadget4 Execution...");
-    //benchmark_gadget4(matrix_size, &spdz_mod, &parties);
+    benchmark_gadget4(matrix_size, &spdz_mod, &parties);
 
     println!("\n[4] Running Range Proof Verification...");
-    //benchmark_range_prove_verify(matrix_size, &parties);
+    benchmark_range_prove_verify(matrix_size, &parties);
+
+    println!("\n[4] Running Enc Dot Product Compute...");
+    benchmark_enc_dots_homo(matrix_size, &parties);
 }
